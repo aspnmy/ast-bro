@@ -21,6 +21,7 @@ use ast_grep_language::{LanguageExt, SupportLang};
 
 #[derive(Parser)]
 #[command(name = "ast-outline")]
+#[command(version)]
 #[command(about = "Fast, AST-based structural outline for source files", long_about = None)]
 struct Cli {
     #[command(subcommand)]

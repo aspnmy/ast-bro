@@ -71,10 +71,16 @@ Result: **same understanding, a fraction of the tokens, a fraction of the round-
 
 ## Install
 
-Requires Cargo (Rust package manager):
+### Homebrew (macOS)
 
 ```bash
-cargo install --git https://github.com/dim-s/ast-outline.git
+brew install aeroxy/ast-outline/ast-outline
+```
+
+### Cargo
+
+```bash
+cargo install ast-outline
 ```
 
 This installs the `ast-outline` CLI globally into `~/.cargo/bin` — make sure that's on your `PATH`.
