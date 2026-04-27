@@ -8,6 +8,8 @@ pub mod gemini;
 pub mod tabnine;
 pub mod cursor;
 pub mod aider;
+pub mod codex;
+pub mod copilot;
 
 use std::path::PathBuf;
 
@@ -74,5 +76,7 @@ pub fn registry() -> Vec<Box<dyn Installer>> {
         Box::new(tabnine::Tabnine),
         Box::new(cursor::Cursor),
         Box::new(aider::Aider),
+        Box::new(codex::Codex),
+        Box::new(copilot::Copilot),
     ]
 }
