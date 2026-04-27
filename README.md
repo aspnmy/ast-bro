@@ -145,8 +145,7 @@ a tool-call hook that intercepts `Read` on supported source files when
 they exceed `--min-lines` (default 200) and substitutes the outline.
 The other targets receive the prompt only.
 
-The legacy manual install via `ast-outline prompt` is still supported
-for power users:
+Manual install via `ast-outline prompt` (e.g. project-level):
 
 ```bash
 ast-outline prompt >> AGENTS.md
