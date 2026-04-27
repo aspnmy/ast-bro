@@ -69,6 +69,45 @@ enum Commands {
     },
     /// Print the agent prompt snippet
     Prompt,
+    /// Install ast-outline into a coding-agent CLI
+    Install {
+        #[arg(long, conflicts_with = "all")]
+        target: Option<String>,
+        #[arg(long, conflicts_with = "target")]
+        all: bool,
+        #[arg(long)]
+        local: bool,
+        #[arg(long, conflicts_with = "local")]
+        global: bool,
+        #[arg(long)]
+        always: bool,
+        #[arg(long, default_value_t = 200)]
+        min_lines: usize,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove ast-outline from a coding-agent CLI
+    Uninstall {
+        #[arg(long, conflicts_with = "all")]
+        target: Option<String>,
+        #[arg(long, conflicts_with = "target")]
+        all: bool,
+        #[arg(long)]
+        local: bool,
+        #[arg(long, conflicts_with = "local")]
+        global: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Report what's installed where
+    Status {
+        #[arg(long)]
+        local: bool,
+        #[arg(long, conflicts_with = "local")]
+        global: bool,
+    },
     /// Internal: read a tool-call event from stdin and respond
     Hook {
         #[arg(long)]
@@ -204,6 +243,45 @@ fn main() {
             Commands::Prompt => {
                 println!("{}", crate::prompt::AGENT_PROMPT);
             }
+            Commands::Install {
+                target,
+                all,
+                local,
+                global,
+                always,
+                min_lines,
+                dry_run,
+                force,
+            } => {
+                let scope = resolve_scope(*local, *global);
+                let opts = installers::InstallOpts {
+                    min_lines: *min_lines,
+                    always: *always,
+                    dry_run: *dry_run,
+                    force: *force,
+                };
+                let exit = run_install(target.as_deref(), *all, &scope, &opts);
+                std::process::exit(exit);
+            }
+            Commands::Uninstall {
+                target,
+                all,
+                local,
+                global,
+                dry_run,
+            } => {
+                let scope = resolve_scope(*local, *global);
+                let opts = installers::InstallOpts {
+                    dry_run: *dry_run,
+                    ..installers::InstallOpts::default()
+                };
+                let exit = run_uninstall(target.as_deref(), *all, &scope, &opts);
+                std::process::exit(exit);
+            }
+            Commands::Status { local, global } => {
+                let scope = resolve_scope(*local, *global);
+                run_status(&scope);
+            }
             Commands::Hook {
                 protocol,
                 min_lines,
@@ -229,5 +307,177 @@ fn main() {
         }
     } else {
         println!("Please provide a path or command.");
+    }
+}
+
+fn resolve_scope(local: bool, _global: bool) -> installers::Scope {
+    if local {
+        installers::Scope::Local(std::env::current_dir().expect("cwd"))
+    } else {
+        installers::Scope::Global
+    }
+}
+
+fn run_install(
+    target: Option<&str>,
+    all: bool,
+    scope: &installers::Scope,
+    opts: &installers::InstallOpts,
+) -> i32 {
+    let registry = installers::registry();
+    let chosen: Vec<&Box<dyn installers::Installer>> = if all {
+        registry.iter().collect()
+    } else if let Some(name) = target {
+        match registry.iter().find(|i| i.name() == name) {
+            Some(i) => vec![i],
+            None => {
+                eprintln!(
+                    "unknown --target '{}'. Known: {}",
+                    name,
+                    names(&registry)
+                );
+                return 2;
+            }
+        }
+    } else {
+        eprintln!(
+            "must pass --target <name> or --all. Known: {}",
+            names(&registry)
+        );
+        return 2;
+    };
+
+    let mut any_installed = false;
+    let mut any_failed = false;
+    for inst in chosen {
+        let label = inst.name();
+        match inst.install_prompt(scope, opts) {
+            Ok(c) => {
+                print_change(label, "prompt", &c);
+                if !matches!(
+                    c,
+                    installers::Change::Skipped { .. } | installers::Change::NotApplicable
+                ) {
+                    any_installed = true;
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: prompt: {}", label, e);
+                any_failed = true;
+            }
+        }
+        match inst.install_hook(scope, opts) {
+            Ok(c) => {
+                print_change(label, "hook", &c);
+                if !matches!(
+                    c,
+                    installers::Change::Skipped { .. } | installers::Change::NotApplicable
+                ) {
+                    any_installed = true;
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: hook: {}", label, e);
+                any_failed = true;
+            }
+        }
+    }
+
+    if any_failed && any_installed {
+        1
+    } else if any_failed {
+        2
+    } else {
+        0
+    }
+}
+
+fn run_uninstall(
+    target: Option<&str>,
+    all: bool,
+    scope: &installers::Scope,
+    opts: &installers::InstallOpts,
+) -> i32 {
+    let registry = installers::registry();
+    let chosen: Vec<&Box<dyn installers::Installer>> = if all {
+        registry.iter().collect()
+    } else if let Some(name) = target {
+        match registry.iter().find(|i| i.name() == name) {
+            Some(i) => vec![i],
+            None => {
+                eprintln!(
+                    "unknown --target '{}'. Known: {}",
+                    name,
+                    names(&registry)
+                );
+                return 2;
+            }
+        }
+    } else {
+        eprintln!(
+            "must pass --target <name> or --all. Known: {}",
+            names(&registry)
+        );
+        return 2;
+    };
+
+    let mut any_failed = false;
+    for inst in chosen {
+        match inst.uninstall(scope, opts) {
+            Ok(changes) => {
+                for c in changes {
+                    print_change(inst.name(), "uninstall", &c);
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: {}", inst.name(), e);
+                any_failed = true;
+            }
+        }
+    }
+    if any_failed {
+        1
+    } else {
+        0
+    }
+}
+
+fn run_status(scope: &installers::Scope) {
+    for inst in installers::registry() {
+        let s = inst.status(scope);
+        let prompt = if s.prompt_installed {
+            format!("prompt {}", s.prompt_version.unwrap_or_else(|| "?".into()))
+        } else {
+            "prompt -".to_string()
+        };
+        let hook = if s.hook_installed { "hook ✓" } else { "hook -" };
+        println!("{:<14} {:<14} {}", inst.name(), prompt, hook);
+    }
+}
+
+fn names(registry: &[Box<dyn installers::Installer>]) -> String {
+    registry
+        .iter()
+        .map(|i| i.name())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn print_change(target: &str, phase: &str, change: &installers::Change) {
+    use installers::Change::*;
+    match change {
+        Created(p) => println!("{:<14} {:<10} created  {}", target, phase, p.display()),
+        Updated(p) => println!("{:<14} {:<10} updated  {}", target, phase, p.display()),
+        Removed(p) => println!("{:<14} {:<10} removed  {}", target, phase, p.display()),
+        Skipped { path, reason } => {
+            println!(
+                "{:<14} {:<10} skipped  {} ({})",
+                target,
+                phase,
+                path.display(),
+                reason
+            )
+        }
+        NotApplicable => println!("{:<14} {:<10} n/a", target, phase),
     }
 }
