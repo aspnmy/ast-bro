@@ -5,6 +5,7 @@ pub mod json_hook;
 pub mod common;
 pub mod claude_code;
 pub mod gemini;
+pub mod tabnine;
 
 use std::path::PathBuf;
 
@@ -68,5 +69,6 @@ pub fn registry() -> Vec<Box<dyn Installer>> {
     vec![
         Box::new(claude_code::ClaudeCode),
         Box::new(gemini::Gemini),
+        Box::new(tabnine::Tabnine),
     ]
 }
