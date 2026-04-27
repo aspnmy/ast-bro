@@ -59,19 +59,14 @@ impl Installer for ClaudeCode {
     }
 
     fn detect(&self, scope: &Scope) -> Detection {
-        let p = match self.prompt_path(scope) {
-            Ok(p) => p,
-            Err(_) => {
-                return Detection {
-                    present: false,
-                    config_root: None,
-                }
-            }
-        };
-        let root = p.parent().map(|p| p.to_path_buf());
+        let dir_exists = self
+            .prompt_path(scope)
+            .ok()
+            .and_then(|p| p.parent().map(|r| r.to_path_buf()))
+            .map(|r| r.exists())
+            .unwrap_or(false);
         Detection {
-            present: root.as_ref().map(|r| r.exists()).unwrap_or(false),
-            config_root: root,
+            present: dir_exists || paths::binary_on_path("claude"),
         }
     }
 

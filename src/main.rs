@@ -326,7 +326,7 @@ fn run_install(
 ) -> i32 {
     let registry = installers::registry();
     let chosen: Vec<&Box<dyn installers::Installer>> = if all {
-        registry.iter().collect()
+        select_all(&registry, scope)
     } else if let Some(name) = target {
         match registry.iter().find(|i| i.name() == name) {
             Some(i) => vec![i],
@@ -400,7 +400,7 @@ fn run_uninstall(
 ) -> i32 {
     let registry = installers::registry();
     let chosen: Vec<&Box<dyn installers::Installer>> = if all {
-        registry.iter().collect()
+        select_all(&registry, scope)
     } else if let Some(name) = target {
         match registry.iter().find(|i| i.name() == name) {
             Some(i) => vec![i],
@@ -461,6 +461,30 @@ fn names(registry: &[Box<dyn installers::Installer>]) -> String {
         .map(|i| i.name())
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// Picks the adapters to act on for `--all`. For `Scope::Global`, we
+/// skip targets whose `detect()` reports the CLI is absent (and print a
+/// note). For `Scope::Local`, the user explicitly opted into this repo
+/// so detection is bypassed.
+fn select_all<'a>(
+    registry: &'a [Box<dyn installers::Installer>],
+    scope: &installers::Scope,
+) -> Vec<&'a Box<dyn installers::Installer>> {
+    let bypass_detection = matches!(scope, installers::Scope::Local(_));
+    registry
+        .iter()
+        .filter(|inst| {
+            if bypass_detection {
+                return true;
+            }
+            let d = inst.detect(scope);
+            if !d.present {
+                println!("{:<14} {:<10} skipped  (not detected on this system)", inst.name(), "detect");
+            }
+            d.present
+        })
+        .collect()
 }
 
 fn print_change(target: &str, phase: &str, change: &installers::Change) {

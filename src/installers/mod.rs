@@ -50,7 +50,6 @@ pub enum Change {
 #[derive(Debug, Clone)]
 pub struct Detection {
     pub present: bool,
-    pub config_root: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]

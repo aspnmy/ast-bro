@@ -36,19 +36,13 @@ impl Installer for Aider {
     }
 
     fn detect(&self, scope: &Scope) -> Detection {
-        let p = match self.config_path(scope) {
-            Ok(p) => p,
-            Err(_) => {
-                return Detection {
-                    present: false,
-                    config_root: None,
-                }
-            }
-        };
-        let root = p.parent().map(|p| p.to_path_buf());
+        let cfg_exists = self
+            .config_path(scope)
+            .ok()
+            .map(|p| p.exists())
+            .unwrap_or(false);
         Detection {
-            present: root.as_ref().map(|r| r.exists()).unwrap_or(false),
-            config_root: root,
+            present: cfg_exists || paths::binary_on_path("aider"),
         }
     }
 
