@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 mod adapters;
 mod core;
 mod prompt;
+mod installers;
+mod hook;
 
 use crate::adapters::base::LanguageAdapter;
 use crate::adapters::csharp::CSharpAdapter;
