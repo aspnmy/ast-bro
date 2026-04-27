@@ -5,19 +5,11 @@ use std::path::{Path, PathBuf};
 mod adapters;
 mod core;
 mod prompt;
+mod installers;
+mod hook;
+mod main_helpers;
 
-use crate::adapters::base::LanguageAdapter;
-use crate::adapters::csharp::CSharpAdapter;
-use crate::adapters::go::GoAdapter;
-use crate::adapters::java::JavaAdapter;
-use crate::adapters::kotlin::KotlinAdapter;
-use crate::adapters::python::PythonAdapter;
-use crate::adapters::rust::RustAdapter;
-use crate::adapters::scala::ScalaAdapter;
-use crate::adapters::typescript::TypeScriptAdapter;
 use crate::core::{DigestOptions, OutlineOptions, ParseResult};
-use ast_grep_core::Language;
-use ast_grep_language::{LanguageExt, SupportLang};
 
 #[derive(Parser)]
 #[command(name = "ast-outline")]
@@ -77,58 +69,58 @@ enum Commands {
     },
     /// Print the agent prompt snippet
     Prompt,
+    /// Install ast-outline into a coding-agent CLI
+    Install {
+        #[arg(long, conflicts_with = "all")]
+        target: Option<String>,
+        #[arg(long, conflicts_with = "target")]
+        all: bool,
+        #[arg(long)]
+        local: bool,
+        #[arg(long, conflicts_with = "local")]
+        global: bool,
+        #[arg(long)]
+        always: bool,
+        #[arg(long, default_value_t = 200)]
+        min_lines: usize,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove ast-outline from a coding-agent CLI
+    Uninstall {
+        #[arg(long, conflicts_with = "all")]
+        target: Option<String>,
+        #[arg(long, conflicts_with = "target")]
+        all: bool,
+        #[arg(long)]
+        local: bool,
+        #[arg(long, conflicts_with = "local")]
+        global: bool,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Report what's installed where
+    Status {
+        #[arg(long)]
+        local: bool,
+        #[arg(long, conflicts_with = "local")]
+        global: bool,
+    },
+    /// Internal: read a tool-call event from stdin and respond
+    Hook {
+        #[arg(long)]
+        protocol: String,
+        #[arg(long, default_value_t = 200)]
+        min_lines: usize,
+        #[arg(long)]
+        always: bool,
+    },
 }
 
 fn parse_file(path: &Path) -> Option<ParseResult> {
-    let lang = SupportLang::from_path(path);
-    let source = std::fs::read_to_string(path).ok()?;
-
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-
-    if ext == "md" || ext == "markdown" || ext == "mdx" {
-        return Some(crate::adapters::markdown::parse_markdown(
-            path,
-            source.as_bytes(),
-        ));
-    }
-
-    let lang = lang?;
-
-    match lang {
-        SupportLang::Rust => {
-            let ast_grep = lang.ast_grep(source.clone());
-            Some(RustAdapter.parse(path, source.as_bytes(), ast_grep.root()))
-        }
-        SupportLang::Python => {
-            let ast_grep = lang.ast_grep(source.clone());
-            Some(PythonAdapter.parse(path, source.as_bytes(), ast_grep.root()))
-        }
-        SupportLang::TypeScript | SupportLang::Tsx | SupportLang::JavaScript => {
-            let ast_grep = lang.ast_grep(source.clone());
-            Some(TypeScriptAdapter.parse(path, source.as_bytes(), ast_grep.root()))
-        }
-        SupportLang::CSharp => {
-            let ast_grep = lang.ast_grep(source.clone());
-            Some(CSharpAdapter.parse(path, source.as_bytes(), ast_grep.root()))
-        }
-        SupportLang::Go => {
-            let ast_grep = lang.ast_grep(source.clone());
-            Some(GoAdapter.parse(path, source.as_bytes(), ast_grep.root()))
-        }
-        SupportLang::Java => {
-            let ast_grep = lang.ast_grep(source.clone());
-            Some(JavaAdapter.parse(path, source.as_bytes(), ast_grep.root()))
-        }
-        SupportLang::Kotlin => {
-            let ast_grep = lang.ast_grep(source.clone());
-            Some(KotlinAdapter.parse(path, source.as_bytes(), ast_grep.root()))
-        }
-        SupportLang::Scala => {
-            let ast_grep = lang.ast_grep(source.clone());
-            Some(ScalaAdapter.parse(path, source.as_bytes(), ast_grep.root()))
-        }
-        _ => None,
-    }
+    crate::main_helpers::parse_file_for_hook(path)
 }
 
 fn walk_and_parse(paths: &[PathBuf], glob_str: Option<&str>) -> Vec<ParseResult> {
@@ -251,6 +243,53 @@ fn main() {
             Commands::Prompt => {
                 println!("{}", crate::prompt::AGENT_PROMPT);
             }
+            Commands::Install {
+                target,
+                all,
+                local,
+                global,
+                always,
+                min_lines,
+                dry_run,
+                force,
+            } => {
+                let scope = resolve_scope(*local, *global);
+                let opts = installers::InstallOpts {
+                    min_lines: *min_lines,
+                    always: *always,
+                    dry_run: *dry_run,
+                    force: *force,
+                };
+                let exit = run_install(target.as_deref(), *all, &scope, &opts);
+                std::process::exit(exit);
+            }
+            Commands::Uninstall {
+                target,
+                all,
+                local,
+                global,
+                dry_run,
+            } => {
+                let scope = resolve_scope(*local, *global);
+                let opts = installers::InstallOpts {
+                    dry_run: *dry_run,
+                    ..installers::InstallOpts::default()
+                };
+                let exit = run_uninstall(target.as_deref(), *all, &scope, &opts);
+                std::process::exit(exit);
+            }
+            Commands::Status { local, global } => {
+                let scope = resolve_scope(*local, *global);
+                run_status(&scope);
+            }
+            Commands::Hook {
+                protocol,
+                min_lines,
+                always,
+            } => {
+                let exit = hook::run(protocol, *min_lines, *always);
+                std::process::exit(exit);
+            }
         }
     } else if !cli.paths.is_empty() {
         let results = walk_and_parse(&cli.paths, cli.glob.as_deref());
@@ -268,5 +307,201 @@ fn main() {
         }
     } else {
         println!("Please provide a path or command.");
+    }
+}
+
+fn resolve_scope(local: bool, _global: bool) -> installers::Scope {
+    if local {
+        installers::Scope::Local(std::env::current_dir().expect("cwd"))
+    } else {
+        installers::Scope::Global
+    }
+}
+
+fn run_install(
+    target: Option<&str>,
+    all: bool,
+    scope: &installers::Scope,
+    opts: &installers::InstallOpts,
+) -> i32 {
+    let registry = installers::registry();
+    let chosen: Vec<&Box<dyn installers::Installer>> = if all {
+        select_all(&registry, scope)
+    } else if let Some(name) = target {
+        match registry.iter().find(|i| i.name() == name) {
+            Some(i) => vec![i],
+            None => {
+                eprintln!(
+                    "unknown --target '{}'. Known: {}",
+                    name,
+                    names(&registry)
+                );
+                return 2;
+            }
+        }
+    } else {
+        eprintln!(
+            "must pass --target <name> or --all. Known: {}",
+            names(&registry)
+        );
+        return 2;
+    };
+
+    let mut any_installed = false;
+    let mut any_failed = false;
+    for inst in chosen {
+        let label = inst.name();
+        match inst.install_prompt(scope, opts) {
+            Ok(c) => {
+                print_change(label, "prompt", &c);
+                if !matches!(
+                    c,
+                    installers::Change::Skipped { .. } | installers::Change::NotApplicable
+                ) {
+                    any_installed = true;
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: prompt: {}", label, e);
+                any_failed = true;
+            }
+        }
+        match inst.install_hook(scope, opts) {
+            Ok(c) => {
+                print_change(label, "hook", &c);
+                if !matches!(
+                    c,
+                    installers::Change::Skipped { .. } | installers::Change::NotApplicable
+                ) {
+                    any_installed = true;
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: hook: {}", label, e);
+                any_failed = true;
+            }
+        }
+    }
+
+    if any_failed && any_installed {
+        1
+    } else if any_failed {
+        2
+    } else {
+        0
+    }
+}
+
+fn run_uninstall(
+    target: Option<&str>,
+    all: bool,
+    scope: &installers::Scope,
+    opts: &installers::InstallOpts,
+) -> i32 {
+    let registry = installers::registry();
+    let chosen: Vec<&Box<dyn installers::Installer>> = if all {
+        select_all(&registry, scope)
+    } else if let Some(name) = target {
+        match registry.iter().find(|i| i.name() == name) {
+            Some(i) => vec![i],
+            None => {
+                eprintln!(
+                    "unknown --target '{}'. Known: {}",
+                    name,
+                    names(&registry)
+                );
+                return 2;
+            }
+        }
+    } else {
+        eprintln!(
+            "must pass --target <name> or --all. Known: {}",
+            names(&registry)
+        );
+        return 2;
+    };
+
+    let mut any_failed = false;
+    for inst in chosen {
+        match inst.uninstall(scope, opts) {
+            Ok(changes) => {
+                for c in changes {
+                    print_change(inst.name(), "uninstall", &c);
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: {}", inst.name(), e);
+                any_failed = true;
+            }
+        }
+    }
+    if any_failed {
+        1
+    } else {
+        0
+    }
+}
+
+fn run_status(scope: &installers::Scope) {
+    for inst in installers::registry() {
+        let s = inst.status(scope);
+        let prompt = if s.prompt_installed {
+            format!("prompt {}", s.prompt_version.unwrap_or_else(|| "?".into()))
+        } else {
+            "prompt -".to_string()
+        };
+        let hook = if s.hook_installed { "hook ✓" } else { "hook -" };
+        println!("{:<14} {:<14} {}", inst.name(), prompt, hook);
+    }
+}
+
+fn names(registry: &[Box<dyn installers::Installer>]) -> String {
+    registry
+        .iter()
+        .map(|i| i.name())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Picks the adapters to act on for `--all`. For `Scope::Global`, we
+/// skip targets whose `detect()` reports the CLI is absent (and print a
+/// note). For `Scope::Local`, the user explicitly opted into this repo
+/// so detection is bypassed.
+fn select_all<'a>(
+    registry: &'a [Box<dyn installers::Installer>],
+    scope: &installers::Scope,
+) -> Vec<&'a Box<dyn installers::Installer>> {
+    let bypass_detection = matches!(scope, installers::Scope::Local(_));
+    registry
+        .iter()
+        .filter(|inst| {
+            if bypass_detection {
+                return true;
+            }
+            let d = inst.detect(scope);
+            if !d.present {
+                println!("{:<14} {:<10} skipped  (not detected on this system)", inst.name(), "detect");
+            }
+            d.present
+        })
+        .collect()
+}
+
+fn print_change(target: &str, phase: &str, change: &installers::Change) {
+    use installers::Change::*;
+    match change {
+        Created(p) => println!("{:<14} {:<10} created  {}", target, phase, p.display()),
+        Updated(p) => println!("{:<14} {:<10} updated  {}", target, phase, p.display()),
+        Removed(p) => println!("{:<14} {:<10} removed  {}", target, phase, p.display()),
+        Skipped { path, reason } => {
+            println!(
+                "{:<14} {:<10} skipped  {} ({})",
+                target,
+                phase,
+                path.display(),
+                reason
+            )
+        }
+        NotApplicable => println!("{:<14} {:<10} n/a", target, phase),
     }
 }

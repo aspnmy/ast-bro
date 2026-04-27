@@ -114,17 +114,41 @@ ast-outline prompt >> AGENTS.md
 
 ## Using with LLM coding agents
 
-This is the main use case. Add the snippet below to your `CLAUDE.md`,
-`AGENTS.md`, subagent file, or any system prompt that steers a coding
-agent. It will then prefer `ast-outline` over reading full files.
+This is the main use case. The fastest path is `ast-outline install`,
+which writes the agent prompt snippet (and, where supported, a real
+`Read`-interceptor hook) into your coding agent's config.
 
-The snippet ships with the tool — `ast-outline prompt` prints it
-verbatim, so you can append it to a project's agent config without
-copy-pasting:
+```bash
+# Install into every supported CLI it can detect on your system.
+ast-outline install --all
+
+# Or pick a single target.
+ast-outline install --target claude-code
+ast-outline install --target gemini --min-lines 150
+
+# See exactly what would change before writing.
+ast-outline install --all --dry-run
+
+# Per-repo install (default is global).
+ast-outline install --target claude-code --local
+
+# Remove everything we wrote.
+ast-outline uninstall --all
+
+# Quick visibility.
+ast-outline status
+```
+
+Supported targets: `claude-code`, `gemini`, `tabnine`, `cursor`,
+`aider`, `codex`, `copilot`. Claude Code, Gemini, and Tabnine also get
+a tool-call hook that intercepts `Read` on supported source files when
+they exceed `--min-lines` (default 200) and substitutes the outline.
+The other targets receive the prompt only.
+
+Manual install via `ast-outline prompt` (e.g. project-level):
 
 ```bash
 ast-outline prompt >> AGENTS.md
-ast-outline prompt >> .claude/CLAUDE.md
 ast-outline prompt | pbcopy   # macOS clipboard
 ```
 
