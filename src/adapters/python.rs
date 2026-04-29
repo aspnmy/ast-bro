@@ -129,9 +129,9 @@ fn _class_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Declaration {
 
     let mut sig = format!("class {}", name);
     if !bases.is_empty() {
-        sig.push_str("(");
+        sig.push('(');
         sig.push_str(&bases.join(", "));
-        sig.push_str(")");
+        sig.push(')');
     }
 
     let range = node.range();

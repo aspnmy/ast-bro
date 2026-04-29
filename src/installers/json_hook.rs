@@ -14,7 +14,7 @@ where
     F: Fn(&Value) -> bool,
 {
     let arr = ensure_array(root, path);
-    if let Some(pos) = arr.iter().position(|v| matches(v)) {
+    if let Some(pos) = arr.iter().position(matches) {
         if arr[pos] == entry {
             return false;
         }
@@ -46,7 +46,7 @@ where
         Some(a) => a,
         None => return false,
     };
-    arr.iter().any(|v| matches(v))
+    arr.iter().any(matches)
 }
 
 fn ensure_array<'a>(root: &'a mut Value, path: &[&str]) -> &'a mut Vec<Value> {

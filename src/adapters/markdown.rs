@@ -196,12 +196,8 @@ fn _end_line_ts(node: tree_sitter::Node) -> usize {
 
 fn _find_heading_ts(section: tree_sitter::Node) -> Option<tree_sitter::Node> {
     let mut cursor = section.walk();
-    for c in section.named_children(&mut cursor) {
-        if c.kind() == "atx_heading" || c.kind() == "setext_heading" {
-            return Some(c);
-        }
-    }
-    None
+    let ret = section.named_children(&mut cursor).find(|&c| c.kind() == "atx_heading" || c.kind() == "setext_heading");
+    ret
 }
 
 fn _heading_level_and_title_ts(heading: tree_sitter::Node, src: &[u8]) -> (usize, String) {

@@ -6,7 +6,7 @@
 //!
 //! Response shape matches Claude Code's:
 //!   pass-through: { "continue": true }
-//!   substitute:   { "decision": "block", "reason": "<content>" }
+//!   substitute:   { "decision": "block", "reason": "\<content\>" }
 
 use std::io::{self, Read, Write};
 use std::path::PathBuf;

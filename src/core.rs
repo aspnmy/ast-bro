@@ -1,6 +1,6 @@
 use colored::Colorize;
 use serde::{Serialize, Serializer};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // Stable JSON schema identifiers — bump on breaking changes.
 pub const JSON_SCHEMA_OUTLINE: &str = "ast-outline.outline.v1";
@@ -766,7 +766,7 @@ fn _digest_markdown(
     out
 }
 
-fn _serialize_path<S: Serializer>(p: &PathBuf, ser: S) -> Result<S::Ok, S::Error> {
+fn _serialize_path<S: Serializer>(p: &Path, ser: S) -> Result<S::Ok, S::Error> {
     ser.serialize_str(&p.to_string_lossy())
 }
 

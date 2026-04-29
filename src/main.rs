@@ -175,7 +175,7 @@ fn walk_and_parse(paths: &[PathBuf], glob_str: Option<&str>) -> Vec<ParseResult>
         let tx = tx.clone();
         Box::new(move |result| {
             if let Ok(entry) = result {
-                if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                if entry.file_type().is_some_and(|ft| ft.is_file()) {
                     if let Some(parsed) = parse_file(entry.path()) {
                         let _ = tx.send(parsed);
                     }
@@ -383,7 +383,7 @@ fn main() {
         } else {
             for res in results {
                 println!("{}", crate::core::render_outline(&res, &opts));
-                println!("");
+                println!();
             }
         }
     } else {
@@ -548,6 +548,7 @@ fn names(registry: &[Box<dyn installers::Installer>]) -> String {
 /// skip targets whose `detect()` reports the CLI is absent (and print a
 /// note). For `Scope::Local`, the user explicitly opted into this repo
 /// so detection is bypassed.
+#[allow(clippy::borrowed_box)]
 fn select_all<'a>(
     registry: &'a [Box<dyn installers::Installer>],
     scope: &installers::Scope,

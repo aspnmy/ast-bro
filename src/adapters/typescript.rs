@@ -38,8 +38,8 @@ fn _walk_module<'a, D: Doc>(node: &Node<'a, D>, src: &[u8], out: &mut Vec<Declar
 fn _node_to_decl<'a, D: Doc>(
     node: &Node<'a, D>,
     src: &[u8],
-    inside_class: bool,
-    inside_interface: bool,
+    _inside_class: bool,
+    _inside_interface: bool,
 ) -> Option<Declaration> {
     let kind = node.kind();
 
@@ -55,7 +55,7 @@ fn _node_to_decl<'a, D: Doc>(
                 continue;
             }
             if _is_handled_top_level(inner.kind().as_ref()) {
-                if let Some(mut decl) = _node_to_decl(&inner, src, inside_class, inside_interface) {
+                if let Some(mut decl) = _node_to_decl(&inner, src, _inside_class, _inside_interface) {
                     decl.start_byte = node.range().start;
                     decl.start_line = node.start_pos().line() + 1;
                     let ds_byte = _leading_doc_start_byte(node).unwrap_or(node.range().start);

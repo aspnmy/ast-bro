@@ -218,8 +218,7 @@ mod tests {
     fn dry_run_does_not_write() {
         let dir = TempDir::new().unwrap();
         let scope = local_scope(&dir);
-        let mut opts = InstallOpts::default();
-        opts.dry_run = true;
+        let opts = InstallOpts { dry_run: true, ..Default::default() };
         ClaudeCode.install_prompt(&scope, &opts).unwrap();
         assert!(!dir.path().join("CLAUDE.md").exists());
     }

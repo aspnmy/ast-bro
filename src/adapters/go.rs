@@ -106,8 +106,8 @@ fn _walk_top<'a, D: Doc>(node: &Node<'a, D>, src: &[u8], out: &mut Vec<Declarati
     // Attach methods
     for (recv, method) in pending_methods {
         if let Some(&idx) = type_index.get(&recv) {
-            let target = if package_ns.is_some() {
-                &mut package_ns.as_mut().unwrap().children[idx]
+            let target = if let Some(ref mut inner) = package_ns {
+                &mut inner.children[idx]
             } else {
                 &mut out[idx]
             };
@@ -596,13 +596,17 @@ fn _spec_to_field<'a, D: Doc>(
     let name = name_node.text().into_owned();
 
     let mut docs = _go_docs(node);
-    if docs.is_empty() && outer_doc_anchor.is_some() {
-        docs = _go_docs(outer_doc_anchor.as_ref().unwrap());
+    if docs.is_empty() {
+        if let Some(ref inner) = outer_doc_anchor {
+            docs = _go_docs(inner);
+        }
     }
 
     let mut doc_start = _leading_doc_start_byte(node);
-    if doc_start.is_none() && outer_doc_anchor.is_some() {
-        doc_start = _leading_doc_start_byte(outer_doc_anchor.as_ref().unwrap());
+    if doc_start.is_none() {
+        if let Some(ref inner) = outer_doc_anchor {
+            doc_start = _leading_doc_start_byte(inner);
+        }
     }
     let doc_start = doc_start.unwrap_or(node.range().start);
 
