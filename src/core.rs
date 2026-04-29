@@ -83,11 +83,8 @@ pub struct Declaration {
     pub visibility: String,
     pub start_line: usize,
     pub end_line: usize,
-    #[serde(skip)]
     pub start_byte: usize,
-    #[serde(skip)]
     pub end_byte: usize,
-    #[serde(skip)]
     pub doc_start_byte: usize,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Declaration>,
@@ -125,10 +122,12 @@ pub struct ParseResult {
 pub struct OutlineOptions {
     pub include_private: bool,
     pub include_fields: bool,
-    pub include_xml_doc: bool,
+    pub include_docs: bool,
     pub include_attributes: bool,
     pub include_line_numbers: bool,
     pub max_doc_lines: usize,
+    /// Cap members per type in JSON digest output (mirrors DigestOptions::max_members_per_type).
+    pub max_members: Option<usize>,
 }
 
 impl Default for OutlineOptions {
@@ -136,10 +135,11 @@ impl Default for OutlineOptions {
         Self {
             include_private: true,
             include_fields: true,
-            include_xml_doc: true,
+            include_docs: true,
             include_attributes: true,
             include_line_numbers: true,
             max_doc_lines: 6,
+            max_members: None,
         }
     }
 }
@@ -263,7 +263,7 @@ fn _render_decl(decl: &Declaration, opts: &OutlineOptions, indent: usize, out: &
 
     let prefix = "    ".repeat(indent);
 
-    if opts.include_xml_doc && !decl.docs.is_empty() && !decl.docs_inside {
+    if opts.include_docs && !decl.docs.is_empty() && !decl.docs_inside {
         for d in _clip_docs(&decl.docs, opts.max_doc_lines) {
             out.push(format!("{}{}", prefix, d));
         }
@@ -294,7 +294,7 @@ fn _render_decl(decl: &Declaration, opts: &OutlineOptions, indent: usize, out: &
         ));
     }
 
-    if opts.include_xml_doc && !decl.docs.is_empty() && decl.docs_inside {
+    if opts.include_docs && !decl.docs.is_empty() && decl.docs_inside {
         let inner_prefix = "    ".repeat(indent + 1);
         for d in _clip_docs(&decl.docs, opts.max_doc_lines) {
             out.push(format!("{}{}", inner_prefix, d));
@@ -781,6 +781,9 @@ fn _serialize_path<S: Serializer>(p: &PathBuf, ser: S) -> Result<S::Ok, S::Error
 /// Respect OutlineOptions when serialising the declaration tree.
 fn _filter_decls(decls: &[Declaration], opts: &OutlineOptions) -> Vec<Declaration> {
     use DeclarationKind::*;
+    if decls.is_empty() {
+        return Vec::new();
+    }
     decls
         .iter()
         .filter_map(|d| {
@@ -791,11 +794,15 @@ fn _filter_decls(decls: &[Declaration], opts: &OutlineOptions) -> Vec<Declaratio
             if d.visibility == "private" && !opts.include_private {
                 return None;
             }
-            if matches!(d.kind, Heading | CodeBlock) && !opts.include_xml_doc {
+            if matches!(d.kind, Heading | CodeBlock) && !opts.include_docs {
                 return None;
             }
             let mut clone = d.clone();
-            clone.children = _filter_decls(&d.children, opts);
+            let mut children = _filter_decls(&d.children, opts);
+            if let Some(cap) = opts.max_members {
+                children.truncate(cap);
+            }
+            clone.children = children;
             Some(clone)
         })
         .collect()

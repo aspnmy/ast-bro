@@ -207,9 +207,15 @@ fn main() {
                     let mut symbols = vec![symbol.as_str()];
                     symbols.extend(others.iter().map(|s| s.as_str()));
                     if *json || cli.json {
+                        let mut seen = std::collections::HashSet::new();
                         let mut all_matches = Vec::new();
                         for sym in symbols {
-                            all_matches.extend(crate::core::find_symbols(&res, sym));
+                            for m in crate::core::find_symbols(&res, sym) {
+                                let key = (m.start_line, m.end_line, m.qualified_name.clone());
+                                if seen.insert(key) {
+                                    all_matches.push(m);
+                                }
+                            }
                         }
                         println!(
                             "{}",
@@ -249,10 +255,11 @@ fn main() {
                     let opts = OutlineOptions {
                         include_private: *include_private,
                         include_fields: *include_fields,
-                        include_xml_doc: true,
+                        include_docs: true,
                         include_attributes: true,
                         include_line_numbers: true,
                         max_doc_lines: 6,
+                        max_members: Some(*max_members),
                     };
                     println!(
                         "{}",
@@ -365,10 +372,11 @@ fn main() {
         let opts = OutlineOptions {
             include_private: !cli.no_private,
             include_fields: !cli.no_fields,
-            include_xml_doc: !cli.no_docs,
+            include_docs: !cli.no_docs,
             include_attributes: !cli.no_attrs,
             include_line_numbers: !cli.no_lines,
             max_doc_lines: 6,
+            max_members: None,
         };
         if cli.json {
             println!("{}", crate::core::render_json_outline(&results, &opts, !cli.compact));
