@@ -47,9 +47,8 @@ All JSON documents carry a `schema` field (e.g. `ast-outline.outline.v1`)
 that will be bumped on breaking changes. Add `--compact` for single-line
 output when pretty-printing is not needed.
 
-## Development (AI Agents)
+## Preparing Release
 
-When preparing a new release:
 1. Bump the version in `Cargo.toml`.
 2. Build the release binary: `cargo build --release`
 3. Zip the binary inside the release folder: `zip -j target/release/ast-outline-macos-arm64.zip target/release/ast-outline`
