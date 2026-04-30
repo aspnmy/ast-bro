@@ -11,6 +11,12 @@ agents and humans who want to read the *shape* of a file before diving into the 
 
 ---
 
+## Acknowledgements
+
+This project's CLI design and core problem framing (5–10× token savings, `show`/`digest`/`implements` commands) were inspired by [dim-s/code-outline](https://github.com/dim-s/code-outline) – an earlier Python implementation by @dim-s. The Rust code itself was largely originated from a bigger code-agent project and uses `ast-grep` for parsing, not a direct port.
+
+---
+
 ## Purpose
 
 **`ast-outline` exists to make LLM coding agents faster, cheaper, and smarter
