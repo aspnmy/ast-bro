@@ -93,6 +93,22 @@ pub fn list() -> Value {
                 }
             },
             {
+                "name": "surface",
+                "description": "True public API surface — resolves `pub use` re-exports (Rust) and `__all__` (Python) to compute exactly what a downstream user sees, not just every `pub`/non-underscore item per file. Falls back to visibility-filtered output for Java/C#/Go/Kotlin (no real re-export concept). Returns text by default; set `json: true` for `ast-outline.surface.v1`.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path":            { "type": "string",  "description": "Crate root file, package init, or directory to auto-detect (default \".\")." },
+                        "tree":            { "type": "boolean", "description": "Render as a hierarchical tree grouped by module." },
+                        "include_chain":   { "type": "boolean", "description": "Append the via-chain on each entry (text mode only)." },
+                        "max_depth":       { "type": "integer", "description": "Recursion guard for re-export chains (default 16)." },
+                        "include_private": { "type": "boolean", "description": "Include private items — only meaningful for the fallback resolver." },
+                        "lang":            { "type": "string",  "description": "Force a resolver: `rust`, `python`, or `fallback`." },
+                        "json":            { "type": "boolean" }
+                    }
+                }
+            },
+            {
                 "name": "search",
                 "description": "Hybrid BM25 + dense semantic search over the repo. First call builds a per-repo index at `.ast-outline/index/` (one-time, ~seconds for typical repos). Returns text by default; set `json: true` for `ast-outline.search.v1`.",
                 "inputSchema": {
@@ -153,6 +169,7 @@ pub fn call(name: &str, args: Value) -> CallResult {
         "digest"       => run_digest(args),
         "show"         => run_show(args),
         "implements"   => run_implements(args),
+        "surface"      => run_surface(args),
         "search"       => crate::search::mcp::run_search(args),
         "find_related" => crate::search::mcp::run_find_related(args),
         "index"        => crate::search::mcp::run_index(args),
@@ -305,6 +322,59 @@ struct ImplementsArgs {
     paths: Vec<PathBuf>,
     #[serde(default)] direct: bool,
     #[serde(default)] json: bool,
+}
+
+#[derive(Deserialize, Default)]
+struct SurfaceArgs {
+    #[serde(default = "default_surface_path")]
+    path: PathBuf,
+    #[serde(default)] tree: bool,
+    #[serde(default)] include_chain: bool,
+    #[serde(default = "default_surface_max_depth")] max_depth: usize,
+    #[serde(default)] include_private: bool,
+    #[serde(default)] lang: Option<String>,
+    #[serde(default)] json: bool,
+}
+
+fn default_surface_path() -> PathBuf {
+    PathBuf::from(".")
+}
+fn default_surface_max_depth() -> usize {
+    16
+}
+
+fn run_surface(args: Value) -> CallResult {
+    let a: SurfaceArgs = match serde_json::from_value(args) {
+        Ok(v) => v,
+        Err(e) => return CallResult::Error(format!("invalid arguments: {}", e)),
+    };
+    let lang_override = match a.lang {
+        Some(s) => match crate::surface::LangOverride::parse(&s) {
+            Some(l) => Some(l),
+            None => return CallResult::Error(format!("unknown lang: {}", s)),
+        },
+        None => None,
+    };
+    let output = if a.json {
+        crate::surface::OutputMode::Json { compact: false }
+    } else if a.tree {
+        crate::surface::OutputMode::Tree
+    } else {
+        crate::surface::OutputMode::Flat
+    };
+    let opts = crate::surface::SurfaceOptions {
+        output,
+        include_private: a.include_private,
+        max_depth: a.max_depth,
+        include_chain: a.include_chain,
+        lang_override,
+    };
+    match crate::surface::resolve_surface(&a.path, &opts) {
+        Ok(entries) => {
+            CallResult::Text(crate::surface::render::render(&entries, output, a.include_chain))
+        }
+        Err(e) => CallResult::Error(format!("{e}")),
+    }
 }
 
 fn run_implements(args: Value) -> CallResult {

@@ -11,6 +11,7 @@ mod hook;
 mod main_helpers;
 mod mcp;
 mod search;
+mod surface;
 
 use crate::core::{DigestOptions, OutlineOptions, ParseResult};
 
@@ -195,6 +196,33 @@ enum Commands {
         top_k: usize,
         #[arg(long)]
         json: bool,
+        #[arg(long)]
+        compact: bool,
+    },
+    /// True public API surface — resolves `pub use` / `__all__` re-exports.
+    Surface {
+        /// Crate root file, package init, or directory to auto-detect.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Render as a hierarchical tree grouped by module.
+        #[arg(long)]
+        tree: bool,
+        /// Append the via-chain on each entry (text mode only).
+        #[arg(long)]
+        include_chain: bool,
+        /// Recursion guard for re-export chains.
+        #[arg(long, default_value_t = 16)]
+        max_depth: usize,
+        /// Include private items (only meaningful for fallback languages).
+        #[arg(long)]
+        include_private: bool,
+        /// Force a specific resolver: `rust`, `python`, or `fallback`.
+        #[arg(long)]
+        lang: Option<String>,
+        /// Emit output as JSON instead of text.
+        #[arg(long)]
+        json: bool,
+        /// With --json: emit compact (single-line) JSON.
         #[arg(long)]
         compact: bool,
     },
@@ -525,6 +553,54 @@ fn main() {
                     !(*compact || cli.compact),
                 );
                 std::process::exit(exit);
+            }
+            Commands::Surface {
+                path,
+                tree,
+                include_chain,
+                max_depth,
+                include_private,
+                lang,
+                json,
+                compact,
+            } => {
+                let lang_override = match lang {
+                    Some(s) => match crate::surface::LangOverride::parse(s) {
+                        Some(l) => Some(l),
+                        None => {
+                            eprintln!("ast-outline: unknown --lang value '{}'. Expected rust|python|fallback.", s);
+                            std::process::exit(2);
+                        }
+                    },
+                    None => None,
+                };
+                let json_on = *json || cli.json;
+                let pretty = !(*compact || cli.compact);
+                let output = if json_on {
+                    crate::surface::OutputMode::Json { compact: !pretty }
+                } else if *tree {
+                    crate::surface::OutputMode::Tree
+                } else {
+                    crate::surface::OutputMode::Flat
+                };
+                let opts = crate::surface::SurfaceOptions {
+                    output,
+                    include_private: *include_private,
+                    max_depth: *max_depth,
+                    include_chain: *include_chain,
+                    lang_override,
+                };
+                match crate::surface::resolve_surface(path, &opts) {
+                    Ok(entries) => {
+                        let rendered =
+                            crate::surface::render::render(&entries, opts.output, opts.include_chain);
+                        print!("{}", rendered);
+                    }
+                    Err(e) => {
+                        eprintln!("ast-outline: {e}");
+                        std::process::exit(1);
+                    }
+                }
             }
             Commands::Index {
                 path,

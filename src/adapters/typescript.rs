@@ -54,8 +54,19 @@ fn _node_to_decl<'a, D: Doc>(
             if !inner.is_named() {
                 continue;
             }
-            if _is_handled_top_level(inner.kind().as_ref()) {
-                if let Some(mut decl) = _node_to_decl(&inner, src, _inside_class, _inside_interface) {
+            // `export declare class/function/...` — the `declare` keyword
+            // wraps the real decl in an `ambient_declaration` node. Step
+            // through it so we still emit the inner decl.
+            let effective = if inner.kind() == "ambient_declaration" {
+                inner
+                    .children()
+                    .find(|c| c.is_named() && _is_handled_top_level(c.kind().as_ref()))
+                    .unwrap_or_else(|| inner.clone())
+            } else {
+                inner.clone()
+            };
+            if _is_handled_top_level(effective.kind().as_ref()) {
+                if let Some(mut decl) = _node_to_decl(&effective, src, _inside_class, _inside_interface) {
                     decl.start_byte = node.range().start;
                     decl.start_line = node.start_pos().line() + 1;
                     let ds_byte = _leading_doc_start_byte(node).unwrap_or(node.range().start);
@@ -68,7 +79,7 @@ fn _node_to_decl<'a, D: Doc>(
                         decl.attrs = new_attrs;
                     }
 
-                    decl.signature = _signature_from_range(node, src, &inner);
+                    decl.signature = _signature_from_range(node, src, &effective);
                     return Some(decl);
                 }
             }
@@ -88,7 +99,7 @@ fn _node_to_decl<'a, D: Doc>(
     if kind == "type_alias_declaration" {
         return Some(_type_alias_to_decl(node, src));
     }
-    if kind == "function_declaration" {
+    if kind == "function_declaration" || kind == "function_signature" {
         return Some(_function_to_decl(node, src, false));
     }
 
@@ -129,6 +140,7 @@ fn _is_handled_top_level(kind: &str) -> bool {
             | "enum_declaration"
             | "type_alias_declaration"
             | "function_declaration"
+            | "function_signature"
             | "lexical_declaration"
             | "variable_declaration"
     )

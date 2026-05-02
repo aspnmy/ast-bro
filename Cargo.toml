@@ -1,6 +1,6 @@
 [package]
 name = "ast-outline"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Fast, AST-based structural outline for source files. Built for LLM coding agents and humans."
 authors = ["Aero <aero.windwalker@gmail.com>"]
@@ -14,8 +14,6 @@ include = [
     "Cargo.toml",
     "README.md",
     "LICENSE",
-    "wiki/**/",
-    "AGENTS.md",
 ]
 
 [dependencies]

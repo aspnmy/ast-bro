@@ -158,6 +158,10 @@ ast-outline show Player.cs TakeDamage
 # Compact public-API map of a whole module
 ast-outline digest src/Services
 
+# True public surface (resolves `pub use` / `__all__`, not every `pub` item)
+ast-outline surface .                  # auto-detect Cargo.toml / pyproject.toml / __init__.py
+ast-outline surface --tree --include-chain mycrate/
+
 # Every class that inherits/implements a given type
 ast-outline implements IDamageable src/
 
