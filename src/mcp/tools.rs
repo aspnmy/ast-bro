@@ -91,6 +91,50 @@ pub fn list() -> Value {
                     },
                     "required": ["target", "paths"]
                 }
+            },
+            {
+                "name": "search",
+                "description": "Hybrid BM25 + dense semantic search over the repo. First call builds a per-repo index at `.ast-outline/index/` (one-time, ~seconds for typical repos). Returns text by default; set `json: true` for `ast-outline.search.v1`.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query":     { "type": "string",  "description": "Search query (free-form text or symbol name)." },
+                        "path":      { "type": "string",  "description": "Repo root to search in (default \".\")." },
+                        "top_k":     { "type": "integer", "description": "Max results to return (default 10).", "minimum": 1 },
+                        "alpha":     { "type": "number",  "description": "Override semantic-vs-BM25 weight (0.0=pure BM25, 1.0=pure semantic). Default auto-detects from query type." },
+                        "languages": { "type": "array", "items": { "type": "string" }, "description": "Restrict to chunks of these languages (e.g. [\"rust\", \"python\"])." },
+                        "json":      { "type": "boolean", "description": "Return JSON (schema `ast-outline.search.v1`) instead of text." }
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "find_related",
+                "description": "Find chunks semantically similar to a given file:line. Useful for navigating to related code. Returns text by default; set `json: true` for `ast-outline.related.v1`.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path":  { "type": "string",  "description": "Repo-relative path of the source chunk." },
+                        "line":  { "type": "integer", "description": "1-indexed line within `path`.", "minimum": 1 },
+                        "root":  { "type": "string",  "description": "Repo root containing the index (default \".\")." },
+                        "top_k": { "type": "integer", "description": "Max results (default 10).", "minimum": 1 },
+                        "json":  { "type": "boolean" }
+                    },
+                    "required": ["path", "line"]
+                }
+            },
+            {
+                "name": "index",
+                "description": "Build, refresh, or inspect the per-repo search index. With `stats: true` returns index stats. With `rebuild: true` drops the cache and rebuilds. Otherwise just opens (and incrementally refreshes if files changed). Returns text by default; set `json: true` for `ast-outline.index-stats.v1`.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path":    { "type": "string",  "description": "Repo root (default \".\")." },
+                        "rebuild": { "type": "boolean", "description": "Drop existing cache and rebuild." },
+                        "stats":   { "type": "boolean", "description": "Print index stats and return." },
+                        "json":    { "type": "boolean" }
+                    }
+                }
             }
         ]
     })
@@ -105,10 +149,13 @@ pub enum CallResult {
 
 pub fn call(name: &str, args: Value) -> CallResult {
     match name {
-        "outline"    => run_outline(args),
-        "digest"     => run_digest(args),
-        "show"       => run_show(args),
-        "implements" => run_implements(args),
+        "outline"      => run_outline(args),
+        "digest"       => run_digest(args),
+        "show"         => run_show(args),
+        "implements"   => run_implements(args),
+        "search"       => crate::search::mcp::run_search(args),
+        "find_related" => crate::search::mcp::run_find_related(args),
+        "index"        => crate::search::mcp::run_index(args),
         other => CallResult::Error(format!("unknown tool: {}", other)),
     }
 }

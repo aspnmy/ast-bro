@@ -4,11 +4,13 @@ use std::path::{Path, PathBuf};
 
 mod adapters;
 mod core;
+mod file_filter;
 mod prompt;
 mod installers;
 mod hook;
 mod main_helpers;
 mod mcp;
+mod search;
 
 use crate::core::{DigestOptions, OutlineOptions, ParseResult};
 
@@ -144,10 +146,90 @@ enum Commands {
     },
     /// Run as an MCP (Model Context Protocol) server over stdio
     Mcp,
+    /// Hybrid BM25 + dense semantic search over the repo
+    Search {
+        /// Search query (free-form text or symbol name)
+        query: String,
+        /// Repository root to search in (default: ".")
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Number of results to return
+        #[arg(short = 'k', long = "top-k", default_value_t = 10)]
+        top_k: usize,
+        /// Override auto alpha (semantic vs. BM25 weight, 0.0–1.0)
+        #[arg(long)]
+        alpha: Option<f32>,
+        /// Filter by language (repeatable, e.g. `--lang rust --lang python`)
+        #[arg(long = "lang")]
+        languages: Vec<String>,
+        /// Force a full rebuild of the index before searching
+        #[arg(long)]
+        rebuild: bool,
+        /// Emit output as JSON instead of text
+        #[arg(long)]
+        json: bool,
+        /// With --json: emit compact (single-line) JSON
+        #[arg(long)]
+        compact: bool,
+    },
+    /// Find chunks semantically similar to a given file:line
+    ///
+    /// Pass the source location either as a positional `<FILE>:<LINE>`
+    /// (matches grep / search-result output you can paste back) or via
+    /// `--file <FILE> --line <LINE>` for scripting use.
+    FindRelated {
+        /// Source location as `<FILE>:<LINE>`. Optional when `--file` and
+        /// `--line` are passed together.
+        #[arg(required_unless_present_all = ["file", "line"], conflicts_with_all = ["file", "line"])]
+        target: Option<String>,
+        /// Repository root containing the index (default: ".")
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Alternative to the positional `<FILE>:<LINE>` form
+        #[arg(long, requires = "line")]
+        file: Option<String>,
+        /// 1-indexed line number when using `--file`
+        #[arg(long, requires = "file")]
+        line: Option<u32>,
+        #[arg(short = 'k', long = "top-k", default_value_t = 10)]
+        top_k: usize,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        compact: bool,
+    },
+    /// Build, refresh, or inspect the per-repo search index
+    Index {
+        /// Repository root (default: ".")
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Drop any existing cache and rebuild from scratch
+        #[arg(long)]
+        rebuild: bool,
+        /// Print index stats and exit
+        #[arg(long)]
+        stats: bool,
+        /// With --stats: emit output as JSON
+        #[arg(long)]
+        json: bool,
+        /// With --json: emit compact (single-line) JSON
+        #[arg(long)]
+        compact: bool,
+    },
 }
 
 pub(crate) fn parse_file(path: &Path) -> Option<ParseResult> {
     crate::main_helpers::parse_file_for_hook(path)
+}
+
+/// Parse `<FILE>:<LINE>` into the two parts. Returns `None` if there's no
+/// colon or the suffix doesn't parse as a u32. Used by `find-related`.
+fn parse_file_line(s: &str) -> Option<(String, u32)> {
+    let (file, line) = s.rsplit_once(':')?;
+    if file.is_empty() {
+        return None;
+    }
+    Some((file.to_string(), line.parse().ok()?))
 }
 
 pub(crate) fn walk_and_parse(paths: &[PathBuf], glob_str: Option<&str>) -> Vec<ParseResult> {
@@ -163,6 +245,7 @@ pub(crate) fn walk_and_parse(paths: &[PathBuf], glob_str: Option<&str>) -> Vec<P
     }
 
     builder.hidden(false); // don't ignore hidden files automatically if they match
+    file_filter::add_filters(&mut builder); // honour .ast-outline-ignore
 
     if let Some(g) = glob_str {
         if let Ok(override_builder) = ignore::overrides::OverrideBuilder::new("").add(g) {
@@ -174,11 +257,20 @@ pub(crate) fn walk_and_parse(paths: &[PathBuf], glob_str: Option<&str>) -> Vec<P
 
     let walker = builder.build_parallel();
 
+    // Pre-compute the (single) root used to check the hardcoded denylist —
+    // when multiple roots are passed, fall back to the first; users who do
+    // that are typically scoping ast-outline at a sub-tree, where the denylist
+    // semantics still hold (e.g. `node_modules` under any of them).
+    let root = paths[0].clone();
+
     walker.run(|| {
         let tx = tx.clone();
+        let root = root.clone();
         Box::new(move |result| {
             if let Ok(entry) = result {
-                if entry.file_type().is_some_and(|ft| ft.is_file()) {
+                if entry.file_type().is_some_and(|ft| ft.is_file())
+                    && !file_filter::should_skip_path(entry.path(), &root)
+                {
                     if let Some(parsed) = parse_file(entry.path()) {
                         let _ = tx.send(parsed);
                     }
@@ -371,6 +463,83 @@ fn main() {
             }
             Commands::Mcp => {
                 let exit = mcp::run();
+                std::process::exit(exit);
+            }
+            Commands::Search {
+                query,
+                path,
+                top_k,
+                alpha,
+                languages,
+                rebuild,
+                json,
+                compact,
+            } => {
+                if *rebuild {
+                    if let Err(e) = crate::search::index::Index::build(path) {
+                        eprintln!("ast-outline: rebuild failed: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                let exit = crate::search::cli::run_search(
+                    query,
+                    path,
+                    *top_k,
+                    *alpha,
+                    languages.clone(),
+                    *json || cli.json,
+                    !(*compact || cli.compact),
+                );
+                std::process::exit(exit);
+            }
+            Commands::FindRelated {
+                target,
+                path,
+                file,
+                line,
+                top_k,
+                json,
+                compact,
+            } => {
+                // Clap guarantees one of: (target alone) or (file + line).
+                let (file_path, line_num) = match (target, file, line) {
+                    (Some(t), _, _) => match parse_file_line(t) {
+                        Some(parsed) => parsed,
+                        None => {
+                            eprintln!(
+                                "ast-outline: expected <FILE>:<LINE>, got {t:?} \
+                                 (or use --file FILE --line N instead)"
+                            );
+                            std::process::exit(2);
+                        }
+                    },
+                    (None, Some(f), Some(l)) => (f.clone(), *l),
+                    _ => unreachable!("clap should have rejected this argument combination"),
+                };
+                let exit = crate::search::cli::run_find_related(
+                    &file_path,
+                    line_num,
+                    path,
+                    *top_k,
+                    *json || cli.json,
+                    !(*compact || cli.compact),
+                );
+                std::process::exit(exit);
+            }
+            Commands::Index {
+                path,
+                rebuild,
+                stats,
+                json,
+                compact,
+            } => {
+                let exit = crate::search::cli::run_index(
+                    path,
+                    *rebuild,
+                    *stats,
+                    *json || cli.json,
+                    !(*compact || cli.compact),
+                );
                 std::process::exit(exit);
             }
         }

@@ -1,0 +1,165 @@
+//! MCP-side handlers for `search`, `find_related`, `index`. Called from
+//! `src/mcp/tools.rs::call`. Mirrors `src/search/cli.rs` in behaviour but
+//! takes `serde_json::Value` args and returns `CallResult` instead of an
+//! exit code.
+//!
+//! When `json: true` is passed, the tool returns the same JSON document the
+//! CLI emits — the schema constants in `format.rs` are shared between the
+//! two surfaces. When `json: false` (the default), the human-readable text
+//! form is returned, mirroring how the existing MCP tools (outline, digest,
+//! show, implements) behave.
+
+use crate::mcp::tools::CallResult;
+use crate::search::format::{
+    render_index_stats_json, render_index_stats_text, render_related_json, render_related_text,
+    render_search_json, render_search_text,
+};
+use crate::search::fusion::resolve_alpha;
+use crate::search::index::{Index, SearchOptions};
+use serde::Deserialize;
+use serde_json::Value;
+use std::path::PathBuf;
+
+#[derive(Deserialize, Default)]
+struct SearchArgs {
+    query: String,
+    #[serde(default = "default_path")]
+    path: PathBuf,
+    #[serde(default = "default_top_k")]
+    top_k: usize,
+    #[serde(default)]
+    alpha: Option<f32>,
+    #[serde(default)]
+    languages: Vec<String>,
+    #[serde(default)]
+    json: bool,
+}
+
+#[derive(Deserialize, Default)]
+struct FindRelatedArgs {
+    path: String,
+    line: u32,
+    #[serde(default = "default_path")]
+    root: PathBuf,
+    #[serde(default = "default_top_k")]
+    top_k: usize,
+    #[serde(default)]
+    json: bool,
+}
+
+#[derive(Deserialize, Default)]
+struct IndexArgs {
+    #[serde(default = "default_path")]
+    path: PathBuf,
+    #[serde(default)]
+    rebuild: bool,
+    #[serde(default)]
+    stats: bool,
+    #[serde(default)]
+    json: bool,
+}
+
+fn default_path() -> PathBuf {
+    PathBuf::from(".")
+}
+
+fn default_top_k() -> usize {
+    10
+}
+
+pub fn run_search(args: Value) -> CallResult {
+    let args: SearchArgs = match serde_json::from_value(args) {
+        Ok(a) => a,
+        Err(e) => return CallResult::Error(format!("invalid args: {e}")),
+    };
+    if args.query.trim().is_empty() {
+        return CallResult::Error("query is required".to_string());
+    }
+    let index = match Index::open(&args.path) {
+        Ok(i) => i,
+        Err(e) => return CallResult::Error(format!("failed to open index: {e}")),
+    };
+    let opts = SearchOptions {
+        top_k: args.top_k,
+        alpha: args.alpha,
+        languages: if args.languages.is_empty() { None } else { Some(args.languages) },
+    };
+    let hits = index.search(&args.query, &opts);
+    let out = if args.json {
+        let alpha_used = resolve_alpha(&args.query, args.alpha);
+        // MCP clients typically parse JSON, so default to compact form.
+        render_search_json(&args.query, alpha_used, &hits, /* pretty */ false)
+    } else {
+        render_search_text(&args.query, &hits)
+    };
+    CallResult::Text(out)
+}
+
+pub fn run_find_related(args: Value) -> CallResult {
+    let args: FindRelatedArgs = match serde_json::from_value(args) {
+        Ok(a) => a,
+        Err(e) => return CallResult::Error(format!("invalid args: {e}")),
+    };
+    if args.path.is_empty() || args.line == 0 {
+        return CallResult::Error("path and line (1-indexed) are required".to_string());
+    }
+    let index = match Index::open(&args.root) {
+        Ok(i) => i,
+        Err(e) => return CallResult::Error(format!("failed to open index: {e}")),
+    };
+    let hits = match index.find_related(&args.path, args.line, args.top_k) {
+        Some(h) => h,
+        None => {
+            return CallResult::Error(format!(
+                "no chunk at {}:{} (was the file indexed?)",
+                args.path, args.line
+            ));
+        }
+    };
+    let out = if args.json {
+        render_related_json(&args.path, args.line, &hits, false)
+    } else {
+        render_related_text(&args.path, args.line, &hits)
+    };
+    CallResult::Text(out)
+}
+
+pub fn run_index(args: Value) -> CallResult {
+    let args: IndexArgs = match serde_json::from_value(args) {
+        Ok(a) => a,
+        Err(e) => return CallResult::Error(format!("invalid args: {e}")),
+    };
+    let result = if args.rebuild {
+        Index::build(&args.path)
+    } else {
+        Index::open(&args.path)
+    };
+    let index = match result {
+        Ok(i) => i,
+        Err(e) => return CallResult::Error(format!("index build failed: {e}")),
+    };
+    if args.stats || args.json {
+        let cfg = bincode::config::standard();
+        let file_count = std::fs::read(&index.paths.files_bin)
+            .ok()
+            .and_then(|b| {
+                bincode::serde::decode_from_slice::<Vec<crate::search::cache::FileRecord>, _>(
+                    &b, cfg,
+                )
+                .ok()
+                .map(|(v, _)| v.len())
+            })
+            .unwrap_or(0);
+        let out = if args.json {
+            render_index_stats_json(&index.meta, file_count, false)
+        } else {
+            render_index_stats_text(&index.meta, file_count)
+        };
+        return CallResult::Text(out);
+    }
+    CallResult::Text(format!(
+        "Indexed {} chunk(s) at {}\n",
+        index.chunk_count(),
+        index.paths.root.display()
+    ))
+}

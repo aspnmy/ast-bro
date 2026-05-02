@@ -13,7 +13,7 @@ agents and humans who want to read the *shape* of a file before diving into the 
 
 ## Acknowledgements
 
-This project's CLI design and core problem framing (5–10× token savings, `show`/`digest`/`implements` commands) were inspired by [dim-s/code-outline](https://github.com/dim-s/code-outline) – an earlier Python implementation by @dim-s. The Rust code itself was largely originated from a bigger code-agent project and uses `ast-grep` for parsing, not a direct port.
+This project's CLI core problem framing (5–10× token savings) and `show`/`digest`/`implements` commands were inspired by [dim-s/code-outline](https://github.com/dim-s/code-outline). The Rust code itself was largely originated from a bigger code-agent project and uses `ast-grep` for parsing, not a direct port.
 
 ---
 
@@ -72,6 +72,26 @@ Result: **same understanding, a fraction of the tokens, a fraction of the round-
 | Markdown   | `.md`, `.markdown`, `.mdx`, `.mdown` |
 
 *More coming soon! Adding another language is a single new adapter file leveraging the massive `ast-grep` language ecosystem.*
+
+---
+
+## What gets walked
+
+`ast-outline` skips a lot of files when walking a directory — by design. Filters apply uniformly across every subcommand.
+
+1. **`.gitignore` and friends** — every level's `.gitignore`, your global gitignore, `.git/info/exclude`, and `.ignore` files (the [`ignore`](https://crates.io/crates/ignore) crate's convention used by `ripgrep`/`fd`).
+2. **Hardcoded denylist** — directories almost no one wants walked, even if `.gitignore` doesn't list them: `.git`, `node_modules`, `target`, `dist`, `build`, `__pycache__`, `.venv`, `venv`, `.cache`, `.idea`, `.vscode`, `.next`, `.nuxt`, `.turbo`, `.parcel-cache`, `.gradle`, `.tox`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `.eggs`, `.ast-outline`, and a few others.
+3. **`.ast-outline-ignore`** — per-repo escape hatch. Same syntax as `.gitignore`. Useful for excluding paths from `ast-outline` that you *don't* want excluded from git itself, e.g. test fixtures or vendored corpora:
+
+   ```gitignore
+   # .ast-outline-ignore
+   tests/fixtures/large_corpus/
+   benches/data/
+   *.generated.rs
+   ```
+4. **Extension allowlist** — files are only opened if their extension is one ast-outline knows how to parse (the table above for outline/digest/show/implements; a broader set for the search commands).
+
+Want to see exactly what ast-outline walks? Compare `ast-outline digest some/dir` with `rg --files some/dir` — anything in `rg` but not the digest is being filtered by one of the layers above.
 
 ---
 
@@ -141,6 +161,18 @@ ast-outline digest src/Services
 # Every class that inherits/implements a given type
 ast-outline implements IDamageable src/
 
+# Hybrid BM25 + dense semantic search (builds an index on first call)
+ast-outline search "how does login work"
+ast-outline search "HandlerStack" -k 5
+
+# Find code semantically similar to a given file:line
+ast-outline find-related src/auth/login.rs:42
+
+# Build / refresh / inspect the per-repo search index
+ast-outline index            # build or refresh
+ast-outline index --stats    # show chunk count, model, etc.
+ast-outline index --rebuild  # drop cache and rebuild
+
 # Output a prompt snippet to steer LLM agents
 ast-outline prompt >> AGENTS.md
 
@@ -149,6 +181,7 @@ ast-outline src/player.rs --json
 ast-outline digest src/ --json
 ast-outline show Player.cs TakeDamage --json
 ast-outline implements IDamageable src/ --json
+ast-outline search "json rendering" --json
 ```
 
 ---
@@ -304,9 +337,12 @@ tools that map 1:1 to the CLI commands:
 | Tool | Equivalent CLI | Returns |
 |------|----------------|---------|
 | `outline`    | `ast-outline <paths>`             | text, or `ast-outline.outline.v1` with `json: true` |
-| `digest`     | `ast-outline digest <paths>`      | text, or `ast-outline.outline.v1` with `json: true` |
-| `show`       | `ast-outline show <path> <syms>`  | text, or `ast-outline.show.v1` with `json: true` |
-| `implements` | `ast-outline implements <type> <paths>` | text, or `ast-outline.implements.v1` with `json: true` |
+| `digest`       | `ast-outline digest <paths>`            | text, or `ast-outline.outline.v1` with `json: true` |
+| `show`         | `ast-outline show <path> <syms>`        | text, or `ast-outline.show.v1` with `json: true` |
+| `implements`   | `ast-outline implements <type> <paths>` | text, or `ast-outline.implements.v1` with `json: true` |
+| `search`       | `ast-outline search "<query>"`          | text, or `ast-outline.search.v1` with `json: true` |
+| `find_related` | `ast-outline find-related <file>:<line>`| text, or `ast-outline.related.v1` with `json: true` |
+| `index`        | `ast-outline index`                     | text, or `ast-outline.index-stats.v1` with `json: true` |
 
 Wire it into a client by pointing at the binary:
 
@@ -321,6 +357,47 @@ Wire it into a client by pointing at the binary:
 The server is fully synchronous, has no extra runtime dependencies, and adds
 roughly 1% to the binary size. The CLI itself is unaffected — none of the MCP
 code runs unless you invoke the `mcp` subcommand.
+
+---
+
+## Semantic search
+
+`ast-outline search` runs hybrid retrieval over a per-repo index:
+
+- **BM25** for exact identifier matches and keyword density.
+- **Dense embeddings** via [`minishlab/potion-code-16M`](https://huggingface.co/minishlab/potion-code-16M) — a static (no inference) `vocab × 256` model that runs on CPU in microseconds.
+- **Reciprocal Rank Fusion** (k = 60) blends the two; alpha auto-resolves to 0.3 for symbol queries (`HandlerStack`, `Sinatra::Base` — lean BM25) and 0.5 for natural language ("how does login work" — balanced).
+- A ranking pass adds definition boosts (3× for chunks that *define* a queried symbol), file-coherence boosts (multi-chunk hits in the same file lift the top chunk), file-stem matches for NL queries, and path-based penalties (test files 0.3×, `.d.ts` stubs 0.7×, `__init__.py` 0.5×).
+
+`ast-outline find-related <file>:<line>` is the same engine in semantic-only mode, language-filtered, with the source chunk excluded — useful for "what else is structured like this?"
+
+```bash
+ast-outline search "request validation" -k 5
+ast-outline search "HandlerStack" --json
+ast-outline find-related src/auth/login.rs:42 -k 3
+```
+
+### How indexing works
+
+First call to `search` / `find-related` builds an index at `.ast-outline/index/`:
+
+```
+.ast-outline/
+  .gitignore           # auto-written, contents: "*"
+  index/
+    meta.json          # schema + model + chunk_count
+    chunks.bin         # per-chunk content + line range + language
+    embeddings.f32     # chunk_count × 256 little-endian f32, mmap-friendly
+    bm25.bin           # vocab + idf + postings
+    files.bin          # per-file mtime + xxhash + chunk range
+    lock               # advisory lock for concurrent writers
+```
+
+Subsequent calls walk the tree, compare `(mtime, size)` against `files.bin`, and only hash files where the cheap check fails. If anything changed, the index rebuilds automatically (a v2 will support partial updates against the same on-disk format). Steady-state cost on an unchanged 10k-file repo: ~30 ms of stat syscalls.
+
+The model is downloaded once (~64 MB) on first use to `~/.cache/ast-outline/models/`. It tries HuggingFace first, falls back to `hf-mirror.com` if blocked. **TLS verification is disabled by default** so corporate MITM proxies don't break setup; integrity is enforced via SHA-256 on every cached file. Set `AST_OUTLINE_TLS_STRICT=1` to enforce strict TLS.
+
+For more on what gets indexed (the five filter layers, `.ast-outline-ignore` syntax) see the "What gets walked" section above. For the security trade-offs around the TLS default, see the [network-security wiki page](https://github.com/aeroxy/ast-outline/blob/main/wiki/network-security.md) on GitHub.
 
 ---
 

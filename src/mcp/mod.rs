@@ -8,7 +8,7 @@
 //! Transport: line-delimited JSON on stdin/stdout. One message per line.
 
 mod protocol;
-mod tools;
+pub(crate) mod tools;
 
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
