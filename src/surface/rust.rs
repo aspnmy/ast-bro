@@ -176,8 +176,16 @@ impl SurfaceWalker {
                 }
                 // Lift `pub fn` methods out of `impl` blocks so the surface
                 // shows `mycrate::Client::connect` even though the impl block
-                // itself isn't `pub`. The Rust adapter encodes impls as
-                // `kind=Class, name="impl_<Type>"`.
+                // itself isn't `pub`.
+                //
+                // Two cases land here:
+                //   (a) `impl Foo` for a foreign type — Rust adapter still
+                //       emits these as `kind=Class, name="impl_Foo"`.
+                //   (b) Local `impl` blocks — the adapter regroups them into
+                //       the target type's `children` (see _walk_mod in
+                //       src/adapters/rust.rs). So a Struct/Enum/Trait now
+                //       carries its impl methods as children, and we lift
+                //       them onto `Type::method` from there.
                 if let Some(impl_target) = _impl_target(d) {
                     let mut nested = segments.clone();
                     nested.push(impl_target.to_string());
@@ -190,6 +198,15 @@ impl SurfaceWalker {
                 }
                 if _is_public(d) {
                     self._emit_decl(&segments, d, &mod_file, vec![], false);
+                    if _is_type_with_methods(d) {
+                        let mut nested = segments.clone();
+                        nested.push(d.name.clone());
+                        for child in &d.children {
+                            if _is_public(child) && _is_method_like(child) {
+                                self._emit_decl(&nested, child, &mod_file, vec![], false);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -572,6 +589,26 @@ fn _impl_target(d: &Declaration) -> Option<&str> {
         return None;
     }
     Some(name)
+}
+
+fn _is_type_with_methods(d: &Declaration) -> bool {
+    matches!(
+        d.kind,
+        DeclarationKind::Struct
+            | DeclarationKind::Enum
+            | DeclarationKind::Interface
+            | DeclarationKind::Class
+            | DeclarationKind::Record
+    )
+}
+
+fn _is_method_like(d: &Declaration) -> bool {
+    matches!(
+        d.kind,
+        DeclarationKind::Method
+            | DeclarationKind::Function
+            | DeclarationKind::Constructor
+    )
 }
 
 fn _vis_is_public(v: &str) -> bool {

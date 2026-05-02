@@ -267,8 +267,26 @@ pub(crate) fn walk_and_parse(paths: &[PathBuf], glob_str: Option<&str>) -> Vec<P
         return Vec::new();
     }
 
-    let mut builder = WalkBuilder::new(&paths[0]);
-    for p in paths.iter().skip(1) {
+    // Filter out paths that don't exist — emit a `# note:` so an agent
+    // can tell a typo apart from a genuinely empty directory.
+    let existing: Vec<PathBuf> = paths
+        .iter()
+        .filter(|p| {
+            if p.exists() {
+                true
+            } else {
+                println!("# note: path not found: {}", p.display());
+                false
+            }
+        })
+        .cloned()
+        .collect();
+    if existing.is_empty() {
+        return Vec::new();
+    }
+
+    let mut builder = WalkBuilder::new(&existing[0]);
+    for p in existing.iter().skip(1) {
         builder.add(p);
     }
 
@@ -289,7 +307,7 @@ pub(crate) fn walk_and_parse(paths: &[PathBuf], glob_str: Option<&str>) -> Vec<P
     // when multiple roots are passed, fall back to the first; users who do
     // that are typically scoping ast-outline at a sub-tree, where the denylist
     // semantics still hold (e.g. `node_modules` under any of them).
-    let root = paths[0].clone();
+    let root = existing[0].clone();
 
     walker.run(|| {
         let tx = tx.clone();
@@ -326,13 +344,15 @@ fn main() {
                 json,
                 compact,
             } => {
-                if let Some(res) = parse_file(path) {
+                if !path.exists() {
+                    println!("# note: path not found: {}", path.display());
+                } else if let Some(res) = parse_file(path) {
                     let mut symbols = vec![symbol.as_str()];
                     symbols.extend(others.iter().map(|s| s.as_str()));
                     if *json || cli.json {
                         let mut seen = std::collections::HashSet::new();
                         let mut all_matches = Vec::new();
-                        for sym in symbols {
+                        for sym in &symbols {
                             for m in crate::core::find_symbols(&res, sym) {
                                 let key = (m.start_line, m.end_line, m.qualified_name.clone());
                                 if seen.insert(key) {
@@ -344,10 +364,17 @@ fn main() {
                             "{}",
                             crate::core::render_json_show(&res, &all_matches, !(*compact || cli.compact))
                         );
+                        if all_matches.is_empty() {
+                            // JSON consumers see [] in the payload; humans/agents
+                            // glancing at stderr-free output get a hint too.
+                            println!("# note: no symbol matching {:?} in {}", symbol, path.display());
+                        }
                     } else {
-                        for sym in symbols {
+                        let mut any_match = false;
+                        for sym in &symbols {
                             let matches = crate::core::find_symbols(&res, sym);
                             for m in matches {
+                                any_match = true;
                                 println!(
                                     "# {}:{}-{} {} ({})",
                                     res.path.display(),
@@ -362,7 +389,20 @@ fn main() {
                                 println!("{}", m.source);
                             }
                         }
+                        if !any_match {
+                            let joined = symbols.join(", ");
+                            println!(
+                                "# note: no symbol matching '{}' in {}",
+                                joined,
+                                path.display()
+                            );
+                        }
                     }
+                } else {
+                    println!(
+                        "# note: unsupported file type for `show`: {}",
+                        path.display()
+                    );
                 }
             }
             Commands::Digest {
@@ -534,11 +574,11 @@ fn main() {
                     (Some(t), _, _) => match parse_file_line(t) {
                         Some(parsed) => parsed,
                         None => {
-                            eprintln!(
-                                "ast-outline: expected <FILE>:<LINE>, got {t:?} \
+                            println!(
+                                "# note: expected <FILE>:<LINE>, got {t:?} \
                                  (or use --file FILE --line N instead)"
                             );
-                            std::process::exit(2);
+                            return;
                         }
                     },
                     (None, Some(f), Some(l)) => (f.clone(), *l),
@@ -568,8 +608,8 @@ fn main() {
                     Some(s) => match crate::surface::LangOverride::parse(s) {
                         Some(l) => Some(l),
                         None => {
-                            eprintln!("ast-outline: unknown --lang value '{}'. Expected rust|python|fallback.", s);
-                            std::process::exit(2);
+                            println!("# note: unknown --lang value '{}'. Expected rust|python|fallback.", s);
+                            return;
                         }
                     },
                     None => None,
@@ -597,8 +637,7 @@ fn main() {
                         print!("{}", rendered);
                     }
                     Err(e) => {
-                        eprintln!("ast-outline: {e}");
-                        std::process::exit(1);
+                        println!("# note: {e}");
                     }
                 }
             }

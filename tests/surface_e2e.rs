@@ -196,12 +196,18 @@ fn scala_export_clauses_republish() {
 
 #[test]
 fn unknown_lang_errors_cleanly() {
+    // Unknown --lang is a handled CLI error: stay rc=0, print a `# note:`
+    // on stdout so agentic harnesses don't abort the surrounding bash batch.
     let out = Command::new(bin())
         .args(&["surface", ".", "--lang", "cobol"])
         .env("NO_COLOR", "1")
         .output()
         .expect("run");
-    assert!(!out.status.success());
-    let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("unknown --lang"), "expected friendly error:\n{err}");
+    assert!(out.status.success(), "should exit 0 on handled error");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("# note:") && stdout.contains("unknown --lang"),
+        "expected friendly note on stdout:\nstdout={stdout}\nstderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }

@@ -163,6 +163,9 @@ fn _ns_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Declaration {
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: range.start,
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children,
     }
 }
@@ -208,6 +211,9 @@ fn _type_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Declaration {
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: _leading_doc_start_byte(node).unwrap_or(range.start),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children,
     }
 }
@@ -242,6 +248,9 @@ fn _member_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Option<Declara
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: _leading_doc_start_byte(node).unwrap_or(range.start),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     })
 }

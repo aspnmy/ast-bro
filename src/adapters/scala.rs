@@ -152,6 +152,9 @@ fn _dotted_package_namespace<'a, D: Doc>(pkg_clauses: &[Node<'a, D>], _src: &[u8
         start_byte: first.range().start,
         end_byte: last.range().end,
         doc_start_byte: first.range().start,
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     }
 }
@@ -195,6 +198,9 @@ fn _braced_package_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Declar
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: range.start,
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children,
     }
 }
@@ -284,6 +290,9 @@ fn _type_to_decl<'a, D: Doc>(
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: _resolved_doc_start(node),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children,
     }
 }
@@ -352,6 +361,9 @@ fn _enum_to_decl<'a, D: Doc>(
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: _resolved_doc_start(node),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children,
     }
 }
@@ -391,6 +403,9 @@ fn _enum_case_entries<'a, D: Doc>(node: &Node<'a, D>, _src: &[u8]) -> Vec<Declar
                     start_byte: range.start,
                     end_byte: range.end,
                     doc_start_byte: range.start,
+                    native_kind: None,
+                    modifiers: Vec::new(),
+                    deprecated: false,
                     children: Vec::new(),
                 });
             }
@@ -455,6 +470,9 @@ fn _given_to_decl<'a, D: Doc>(
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: _resolved_doc_start(node),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children,
     })
 }
@@ -492,6 +510,9 @@ fn _package_object_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Declar
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: _resolved_doc_start(node),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children,
     }
 }
@@ -554,6 +575,9 @@ fn _class_parameter_to_field<'a, D: Doc>(
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: range.start,
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     })
 }
@@ -589,6 +613,9 @@ fn _function_to_decl<'a, D: Doc>(
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: _resolved_doc_start(node),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     }
 }
@@ -619,6 +646,9 @@ fn _property_to_decl<'a, D: Doc>(
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: _resolved_doc_start(node),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     })
 }
@@ -667,6 +697,9 @@ fn _type_alias_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Option<Dec
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: _resolved_doc_start(node),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     })
 }

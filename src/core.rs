@@ -8,8 +8,9 @@ pub const JSON_SCHEMA_SHOW: &str = "ast-outline.show.v1";
 pub const JSON_SCHEMA_IMPLEMENTS: &str = "ast-outline.implements.v1";
 pub const JSON_SCHEMA_SURFACE: &str = "ast-outline.surface.v1";
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, Default)]
 pub enum DeclarationKind {
+    #[default]
     Namespace,
     Class,
     Struct,
@@ -69,7 +70,7 @@ impl Serialize for DeclarationKind {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct Declaration {
     pub kind: DeclarationKind,
     pub name: String,
@@ -87,8 +88,31 @@ pub struct Declaration {
     pub start_byte: usize,
     pub end_byte: usize,
     pub doc_start_byte: usize,
+    /// Source-true keyword the language uses for this declaration when
+    /// it diverges from the canonical `kind` (e.g. Rust `trait` vs the
+    /// canonical `interface`, Scala `case class`, Kotlin `data class`,
+    /// C# `record`). Renderers prefer this over `kind.to_string()` when
+    /// present. Adapters populate as needed; default `None` → no change.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_kind: Option<String>,
+    /// Type/method modifiers worth surfacing in compact renderings:
+    /// `async`, `static`, `abstract`, `override`, `unsafe`, `const`,
+    /// `suspend`, `sealed`, `final`, `open`, `partial`, `inline`, …
+    /// The renderer shows these as `[mod]` markers next to the symbol
+    /// in digest output.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modifiers: Vec<String>,
+    /// True when the adapter saw a deprecation marker (`#[deprecated]`,
+    /// `@Deprecated`, `@deprecated`, `[Obsolete]`). Renderers append a
+    /// `[deprecated]` tag.
+    #[serde(default, skip_serializing_if = "_is_false")]
+    pub deprecated: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<Declaration>,
+}
+
+fn _is_false(b: &bool) -> bool {
+    !*b
 }
 
 impl Declaration {
@@ -164,7 +188,212 @@ impl Default for DigestOptions {
     }
 }
 
+// --- Marker post-processing ---
+//
+// Each adapter emits a Declaration with the basics (kind, signature,
+// attrs, docs, visibility). The richer presentation fields —
+// `native_kind`, `modifiers`, `deprecated` — are derived from those
+// basics in one centralised pass keyed off the language string. That
+// keeps adapters dumb and fast (one tree walk only) and lets us add a
+// new marker by editing one file.
+
+/// Walk every declaration tree and fill in `native_kind`, `modifiers`,
+/// and `deprecated` based on the language conventions. Idempotent —
+/// values an adapter already set are preserved.
+pub fn populate_markers(decls: &mut [Declaration], language: &str) {
+    for d in decls.iter_mut() {
+        _populate_one(d, language);
+        if !d.children.is_empty() {
+            populate_markers(&mut d.children, language);
+        }
+    }
+}
+
+fn _populate_one(d: &mut Declaration, lang: &str) {
+    if d.native_kind.is_none() {
+        d.native_kind = _native_kind(d, lang);
+    }
+    if d.modifiers.is_empty() {
+        d.modifiers = _modifiers(d, lang);
+    }
+    if !d.deprecated {
+        d.deprecated = _deprecated(d, lang);
+    }
+}
+
+fn _native_kind(d: &Declaration, lang: &str) -> Option<String> {
+    let sig = d.signature.as_str();
+    // Skip the visibility prefix when looking for a leading keyword.
+    let starts_with_kw = |kw: &str| -> bool {
+        sig.split_whitespace()
+            .find(|t| !matches!(*t, "pub" | "private" | "public" | "internal" | "protected"))
+            .map(|t| t == kw)
+            .unwrap_or(false)
+    };
+    let contains_kw_pair = |first: &str, second: &str| -> bool {
+        let toks: Vec<&str> = sig.split_whitespace().collect();
+        toks.windows(2).any(|w| w[0] == first && w[1] == second)
+    };
+
+    match lang {
+        "rust" => {
+            if matches!(d.kind, DeclarationKind::Interface) && starts_with_kw("trait") {
+                Some("trait".to_string())
+            } else {
+                None
+            }
+        }
+        "scala" => {
+            if contains_kw_pair("case", "class") {
+                Some("case class".to_string())
+            } else if contains_kw_pair("case", "object") {
+                Some("case object".to_string())
+            } else if starts_with_kw("object") {
+                Some("object".to_string())
+            } else if starts_with_kw("trait") {
+                Some("trait".to_string())
+            } else {
+                None
+            }
+        }
+        "kotlin" => {
+            if contains_kw_pair("data", "class") {
+                Some("data class".to_string())
+            } else if contains_kw_pair("enum", "class") {
+                Some("enum class".to_string())
+            } else if contains_kw_pair("sealed", "class") {
+                Some("sealed class".to_string())
+            } else if contains_kw_pair("companion", "object") {
+                Some("companion object".to_string())
+            } else if starts_with_kw("object") {
+                Some("object".to_string())
+            } else {
+                None
+            }
+        }
+        "java" => {
+            if starts_with_kw("record") {
+                Some("record".to_string())
+            } else if starts_with_kw("enum") {
+                Some("enum".to_string())
+            } else if starts_with_kw("interface") {
+                Some("interface".to_string())
+            } else {
+                None
+            }
+        }
+        "csharp" => {
+            if contains_kw_pair("record", "struct") {
+                Some("record struct".to_string())
+            } else if starts_with_kw("record") {
+                Some("record".to_string())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+fn _modifiers(d: &Declaration, lang: &str) -> Vec<String> {
+    let want: &[&str] = match lang {
+        "rust" => &["async", "unsafe", "const", "extern"],
+        "python" => &["async"],
+        "typescript" => &["async", "static", "abstract", "readonly", "override"],
+        "java" => &["static", "abstract", "final", "synchronized", "default", "native"],
+        "kotlin" => &[
+            "suspend", "open", "inner", "value", "inline", "infix", "tailrec", "operator",
+            "abstract", "override", "sealed", "final",
+        ],
+        "scala" => &["sealed", "final", "abstract", "implicit", "inline", "lazy", "override"],
+        "csharp" => &["partial", "sealed", "static", "abstract", "virtual", "override", "async"],
+        _ => &[],
+    };
+    if want.is_empty() {
+        return Vec::new();
+    }
+    // Stop scanning once we hit the actual declaration keyword — anything
+    // beyond is the name/parameter list, not a modifier.
+    let stop_words: &[&str] = match lang {
+        "rust" => &["fn", "trait", "struct", "enum", "impl", "type", "mod"],
+        "python" => &["def", "class"],
+        "typescript" => &[
+            "function", "class", "interface", "enum", "type", "const", "let", "var",
+        ],
+        "java" => &["class", "interface", "enum", "record", "void"],
+        "kotlin" => &["fun", "class", "interface", "object", "enum", "val", "var"],
+        "scala" => &["def", "class", "trait", "object", "val", "var", "type"],
+        "csharp" => &["class", "interface", "struct", "record", "enum", "void"],
+        _ => &[],
+    };
+
+    let mut out = Vec::new();
+    for tok in d.signature.split_whitespace() {
+        if stop_words.contains(&tok) {
+            break;
+        }
+        if want.contains(&tok) {
+            out.push(tok.to_string());
+        }
+    }
+
+    // Python decorators land in `attrs`, not the signature line.
+    if lang == "python" {
+        for a in &d.attrs {
+            let trimmed = a.trim_start_matches('@');
+            let name = trimmed.split('(').next().unwrap_or(trimmed).trim();
+            match name {
+                "classmethod" => out.push("classmethod".to_string()),
+                "staticmethod" => out.push("static".to_string()),
+                "abstractmethod" => out.push("abstract".to_string()),
+                "property" => out.push("property".to_string()),
+                _ => {}
+            }
+        }
+    }
+
+    out
+}
+
+fn _deprecated(d: &Declaration, lang: &str) -> bool {
+    let attr_has = |needle: &str| d.attrs.iter().any(|a| a.contains(needle));
+    let doc_has = |needle: &str| d.docs.iter().any(|x| x.contains(needle));
+    match lang {
+        "rust" => attr_has("#[deprecated") || attr_has("#[ deprecated"),
+        "python" => {
+            attr_has("@deprecated")
+                || attr_has("@typing.deprecated")
+                || attr_has("@warnings.deprecated")
+        }
+        "typescript" => doc_has("@deprecated") || attr_has("@deprecated"),
+        "java" | "kotlin" => attr_has("@Deprecated"),
+        "scala" => attr_has("@deprecated"),
+        "csharp" => attr_has("[Obsolete") || attr_has("[ Obsolete"),
+        // Go convention: a `Deprecated:` paragraph in the doc comment.
+        "go" => doc_has("Deprecated:"),
+        _ => false,
+    }
+}
+
 // --- Renderers ---
+
+/// One-line legend printed above every `digest` output. Tells the
+/// reader (usually an agent) how to decode the compact symbol forms.
+const DIGEST_LEGEND: &str =
+    "# legend: name() = callable · [N×] = N overloads · [m] = modifier · [deprecated] = deprecated\n";
+
+/// Map a line count to a coarse size bucket. Lets agents pick whether
+/// to read the file in full or just the digest.
+fn _size_label(line_count: usize) -> &'static str {
+    match line_count {
+        0..=50 => "tiny",
+        51..=200 => "small",
+        201..=600 => "medium",
+        601..=1500 => "large",
+        _ => "xlarge",
+    }
+}
+
 
 pub fn render_outline(result: &ParseResult, opts: &OutlineOptions) -> String {
     let mut lines = vec![_format_file_header(
@@ -181,7 +410,15 @@ pub fn render_outline(result: &ParseResult, opts: &OutlineOptions) -> String {
 }
 fn _format_file_header(prefix: &str, result: &ParseResult) -> String {
     let counts = _collect_counts(&result.declarations);
-    let mut parts = vec![format!("{} lines", result.line_count)];
+    // Lead with size bucket + raw counts. Char count is intentionally
+    // raw rather than a token estimate — tokenizers vary, and a single
+    // chars/4 number printed authoritatively would mislead. Agents that
+    // care can divide by their tokenizer's empirical ratio.
+    let mut parts = vec![
+        format!("[{}]", _size_label(result.line_count)),
+        format!("{} lines", result.line_count),
+        format!("{} chars", result.source.len()),
+    ];
 
     if result.language == "markdown" {
         let order = [("headings", "headings"), ("code_blocks", "code blocks")];
@@ -345,7 +582,9 @@ pub fn render_digest(
         grouped.entry(parent).or_default().push(r);
     }
 
-    let mut lines = Vec::new();
+    // Top-of-output legend so an agent reading the digest cold knows
+    // what the compact tokens mean.
+    let mut lines = vec![DIGEST_LEGEND.dimmed().to_string()];
     for (dir, res) in grouped {
         let rel = dir.strip_prefix(root).unwrap_or(dir);
         lines.push(format!("{}/", rel.display().to_string().cyan().bold()));
@@ -395,43 +634,51 @@ fn _digest_one(result: &ParseResult, opts: &DigestOptions) -> Vec<String> {
     }
 
     for t in types {
-        let mut header = format!(
-            "    {} {}",
-            t.kind.to_string().italic(),
-            t.name.green().bold()
-        );
+        let mut header = String::from("    ");
+        // Inline attrs (e.g. `#[derive(Debug)]`, `@dataclass`) before the
+        // kind keyword. The adapter populated `attrs` already; we just
+        // surface a short joined form (skip overly long attr lists).
+        let attrs_inline = _format_inline_attrs(&t.attrs);
+        if !attrs_inline.is_empty() {
+            header.push_str(&attrs_inline);
+            header.push(' ');
+        }
+        // Prefer `native_kind` (`trait`, `case class`, `data class`, …)
+        // when the adapter set it; fall back to the canonical kind.
+        let kind_str = t
+            .native_kind
+            .as_deref()
+            .unwrap_or(t.kind.as_str());
+        // Modifiers (abstract / sealed / final / partial / …) — but skip
+        // ones the native_kind already names, so we don't render
+        // "sealed sealed class" for `sealed class Foo`.
+        for m in &t.modifiers {
+            if !kind_str.split_whitespace().any(|w| w == m) {
+                header.push_str(&format!("{} ", m.dimmed()));
+            }
+        }
+        header.push_str(&kind_str.italic().to_string());
+        header.push(' ');
+        header.push_str(&t.name.green().bold().to_string());
         if !t.bases.is_empty() {
             header.push_str(" : ");
             header.push_str(&t.bases.join(", "));
+        }
+        if t.deprecated {
+            header.push_str(&format!(" {}", "[deprecated]".red()));
         }
         header.push_str(&t.lines_suffix());
         lines.push(header);
 
         let members = _digest_members(&t, opts);
         if !members.is_empty() {
-            let shown = &members[..std::cmp::min(members.len(), opts.max_members_per_type)];
-            let mut tokens = Vec::new();
-            for m in shown {
-                if matches!(
-                    m.kind,
-                    DeclarationKind::Method
-                        | DeclarationKind::Function
-                        | DeclarationKind::Constructor
-                        | DeclarationKind::Destructor
-                ) {
-                    tokens.push(format!("+{}", m.name.yellow()));
-                } else {
-                    tokens.push(format!(
-                        "+{} [{}]",
-                        m.name.yellow(),
-                        m.kind.to_string().dimmed()
-                    ));
-                }
-            }
+            let collapsed = _collapse_overloads(members.iter().map(|d| (*d).clone()).collect());
+            let shown = &collapsed[..std::cmp::min(collapsed.len(), opts.max_members_per_type)];
+            let tokens: Vec<String> = shown.iter().map(_format_member_token).collect();
             lines.extend(_wrap_tokens(&tokens, 100, "      "));
-            if members.len() > shown.len() {
+            if collapsed.len() > shown.len() {
                 lines.push(
-                    format!("      ... +{} more", members.len() - shown.len())
+                    format!("      ... +{} more", collapsed.len() - shown.len())
                         .dimmed()
                         .to_string(),
                 );
@@ -440,24 +687,119 @@ fn _digest_one(result: &ParseResult, opts: &DigestOptions) -> Vec<String> {
     }
 
     if !free_functions.is_empty() {
+        let collapsed = _collapse_overloads(free_functions.iter().map(|d| (*d).clone()).collect());
         let shown =
-            &free_functions[..std::cmp::min(free_functions.len(), opts.max_members_per_type)];
-        let mut tokens = Vec::new();
-        for f in shown {
-            if matches!(f.kind, DeclarationKind::Function | DeclarationKind::Method) {
-                tokens.push(format!("+{}", f.name.yellow()));
-            } else {
-                tokens.push(format!(
-                    "+{} [{}]",
-                    f.name.yellow(),
-                    f.kind.to_string().dimmed()
-                ));
-            }
-        }
+            &collapsed[..std::cmp::min(collapsed.len(), opts.max_members_per_type)];
+        let tokens: Vec<String> = shown.iter().map(_format_member_token).collect();
         lines.extend(_wrap_tokens(&tokens, 100, "    "));
     }
 
     lines
+}
+
+/// Render a single member as a compact token for the digest list.
+fn _format_member_token(m: &Declaration) -> String {
+    let mut s = String::new();
+    for mod_ in &m.modifiers {
+        s.push_str(&format!("[{}] ", mod_.dimmed()));
+    }
+    let is_callable = matches!(
+        m.kind,
+        DeclarationKind::Method
+            | DeclarationKind::Function
+            | DeclarationKind::Constructor
+            | DeclarationKind::Destructor
+            | DeclarationKind::Operator
+    );
+    if is_callable {
+        // Display name might already carry an overload-count suffix
+        // ("foo [3×]") that `_collapse_overloads` attached — keep it
+        // outside the parens.
+        if let Some((base, suffix)) = m.name.rsplit_once(' ') {
+            if suffix.starts_with('[') {
+                s.push_str(&format!("{}() {}", base.yellow(), suffix.dimmed()));
+            } else {
+                s.push_str(&format!("{}()", m.name.yellow()));
+            }
+        } else {
+            s.push_str(&format!("{}()", m.name.yellow()));
+        }
+    } else {
+        s.push_str(&format!(
+            "{} [{}]",
+            m.name.yellow(),
+            m.kind.as_str().dimmed()
+        ));
+    }
+    if m.deprecated {
+        s.push_str(&format!(" {}", "[deprecated]".red()));
+    }
+    s
+}
+
+/// Collapse adjacent same-name callables into one token with a `[N×]`
+/// suffix. Saves a noisy line on overload-heavy languages (Java/C# in
+/// particular). Operates on owned `Declaration`s so the renderer can
+/// rewrite the `name`.
+fn _collapse_overloads(members: Vec<Declaration>) -> Vec<Declaration> {
+    let mut out: Vec<Declaration> = Vec::with_capacity(members.len());
+    for m in members {
+        let is_callable = matches!(
+            m.kind,
+            DeclarationKind::Method
+                | DeclarationKind::Function
+                | DeclarationKind::Constructor
+                | DeclarationKind::Destructor
+                | DeclarationKind::Operator
+        );
+        if is_callable {
+            if let Some(prev) = out.last_mut() {
+                if prev.kind == m.kind {
+                    let prev_base = prev
+                        .name
+                        .rsplit_once(' ')
+                        .filter(|(_, s)| s.starts_with('['))
+                        .map(|(b, _)| b)
+                        .unwrap_or(prev.name.as_str());
+                    if prev_base == m.name {
+                        let count = prev
+                            .name
+                            .rsplit_once(' ')
+                            .and_then(|(_, s)| {
+                                s.strip_prefix('[')
+                                    .and_then(|s| s.strip_suffix("×]"))
+                                    .and_then(|s| s.parse::<usize>().ok())
+                            })
+                            .unwrap_or(1)
+                            + 1;
+                        prev.name = format!("{} [{}×]", prev_base, count);
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push(m);
+    }
+    out
+}
+
+/// Pick a small subset of attrs worth showing inline before the kind
+/// keyword. We surface short attrs (under 40 chars combined) to avoid
+/// noise. Long ones (full `#[derive(Debug, Clone, PartialEq, Eq, …)]`)
+/// stay in the outline-only attrs prefix.
+fn _format_inline_attrs(attrs: &[String]) -> String {
+    if attrs.is_empty() {
+        return String::new();
+    }
+    let joined = attrs.join(" ");
+    if joined.len() > 40 {
+        // Fall back to a short marker so the reader knows attrs exist
+        // without flooding the line.
+        return format!("[{}attr{}]", attrs.len(), if attrs.len() == 1 { "" } else { "s" })
+            .dimmed()
+            .to_string();
+    }
+    joined.dimmed().to_string()
 }
 
 fn _flatten_types(decls: &[Declaration], prefix: &str) -> Vec<Declaration> {
@@ -593,7 +935,12 @@ fn _search_walk(
             new_trail.push(d.name.clone());
         }
 
-        if !d.name.is_empty() && _trail_matches(&new_trail, parts) {
+        // For markdown headings, fall back to case-insensitive substring
+        // per dotted part so `show README.md install` matches `## Installation`.
+        // Code symbols stay on exact suffix-equality — substring there would
+        // collide too easily (`new` matching `is_new`, `renew`, …).
+        let heading_relax = matches!(d.kind, DeclarationKind::Heading);
+        if !d.name.is_empty() && _trail_matches(&new_trail, parts, heading_relax) {
             let start = if d.doc_start_byte > 0 {
                 std::cmp::max(d.doc_start_byte, d.start_byte)
             } else {
@@ -620,13 +967,19 @@ fn _search_walk(
     }
 }
 
-fn _trail_matches(trail: &[String], parts: &[&str]) -> bool {
+fn _trail_matches(trail: &[String], parts: &[&str], substring: bool) -> bool {
     if parts.len() > trail.len() {
         return false;
     }
     let start = trail.len() - parts.len();
     for (i, p) in parts.iter().enumerate() {
-        if trail[start + i] != *p {
+        let segment = &trail[start + i];
+        let hit = if substring {
+            segment.to_lowercase().contains(&p.to_lowercase())
+        } else {
+            segment == p
+        };
+        if !hit {
             return false;
         }
     }

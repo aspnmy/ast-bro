@@ -149,6 +149,9 @@ fn _class_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Declaration {
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: range.start,
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children,
     }
 }
@@ -190,6 +193,9 @@ fn _function_to_decl<'a, D: Doc>(
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: range.start,
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     }
 }
@@ -226,6 +232,9 @@ fn _assignment_to_decl<'a, D: Doc>(node: &Node<'a, D>, _src: &[u8]) -> Option<De
         start_byte: range.start,
         end_byte: range.end,
         doc_start_byte: 0,
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     })
 }

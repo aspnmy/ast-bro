@@ -97,6 +97,9 @@ fn _section_to_decl_ts(node: tree_sitter::Node, src: &[u8]) -> Option<Declaratio
         start_byte: node.start_byte(),
         end_byte: node.end_byte(),
         doc_start_byte: node.start_byte(),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children,
     })
 }
@@ -158,6 +161,9 @@ fn _pseudo_section_from_heading_ts(
         start_byte: heading.start_byte(),
         end_byte,
         doc_start_byte: heading.start_byte(),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     })
 }
@@ -179,6 +185,9 @@ fn _code_block_to_decl_ts(node: tree_sitter::Node, src: &[u8]) -> Declaration {
         start_byte: node.start_byte(),
         end_byte: node.end_byte(),
         doc_start_byte: node.start_byte(),
+        native_kind: None,
+        modifiers: Vec::new(),
+        deprecated: false,
         children: Vec::new(),
     }
 }
