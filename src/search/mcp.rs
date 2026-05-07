@@ -8,8 +8,19 @@
 //! two surfaces. When `json: false` (the default), the human-readable text
 //! form is returned, mirroring how the existing MCP tools (outline, digest,
 //! show, implements) behave.
+//!
+//! ## CWD semantics
+//!
+//! MCP servers don't share a meaningful CWD with the caller — the daemon's
+//! `current_dir()` reflects where the server was launched, not where the
+//! agent is working. To keep the index-location resolver predictable, we
+//! pass `cwd = path` (the caller's `path` argument) so the walk-up cap
+//! equals the start point: no walk-up, the path is treated as
+//! authoritative. Agents that want to share an index across calls must
+//! pass an absolute project path consistently.
 
 use crate::mcp::tools::CallResult;
+use crate::project_root::relative_posix;
 use crate::search::format::{
     render_index_stats_json, render_index_stats_text, render_related_json, render_related_text,
     render_search_json, render_search_text,
@@ -18,7 +29,7 @@ use crate::search::fusion::resolve_alpha;
 use crate::search::index::{Index, SearchOptions};
 use serde::Deserialize;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Deserialize, Default)]
 struct SearchArgs {
@@ -75,14 +86,17 @@ pub fn run_search(args: Value) -> CallResult {
     if args.query.trim().is_empty() {
         return CallResult::Error("query is required".to_string());
     }
-    let index = match Index::open(&args.path) {
+    // MCP: cwd = path (no walk-up, path is authoritative).
+    let index = match Index::open(&args.path, &args.path) {
         Ok(i) => i,
         Err(e) => return CallResult::Error(format!("failed to open index: {e}")),
     };
+    let scope = relative_posix(&args.path, &index.paths.root);
     let opts = SearchOptions {
         top_k: args.top_k,
         alpha: args.alpha,
         languages: if args.languages.is_empty() { None } else { Some(args.languages) },
+        query_scope: scope,
     };
     let hits = index.search(&args.query, &opts);
     let out = if args.json {
@@ -103,11 +117,12 @@ pub fn run_find_related(args: Value) -> CallResult {
     if args.path.is_empty() || args.line == 0 {
         return CallResult::Error("path and line (1-indexed) are required".to_string());
     }
-    let index = match Index::open(&args.root) {
+    let index = match Index::open(&args.root, &args.root) {
         Ok(i) => i,
         Err(e) => return CallResult::Error(format!("failed to open index: {e}")),
     };
-    let hits = match index.find_related(&args.path, args.line, args.top_k) {
+    let key = normalize_chunk_key(&args.path, &index.paths.root, &args.root);
+    let hits = match index.find_related(&key, args.line, args.top_k) {
         Some(h) => h,
         None => {
             return CallResult::Error(format!(
@@ -130,9 +145,9 @@ pub fn run_index(args: Value) -> CallResult {
         Err(e) => return CallResult::Error(format!("invalid args: {e}")),
     };
     let result = if args.rebuild {
-        Index::build(&args.path)
+        Index::build(&args.path, &args.path)
     } else {
-        Index::open(&args.path)
+        Index::open(&args.path, &args.path)
     };
     let index = match result {
         Ok(i) => i,
@@ -151,9 +166,9 @@ pub fn run_index(args: Value) -> CallResult {
             })
             .unwrap_or(0);
         let out = if args.json {
-            render_index_stats_json(&index.meta, file_count, false)
+            render_index_stats_json(&index.meta, file_count, &index.paths.root, false)
         } else {
-            render_index_stats_text(&index.meta, file_count)
+            render_index_stats_text(&index.meta, file_count, &index.paths.root)
         };
         return CallResult::Text(out);
     }
@@ -162,4 +177,17 @@ pub fn run_index(args: Value) -> CallResult {
         index.chunk_count(),
         index.paths.root.display()
     ))
+}
+
+fn normalize_chunk_key(input: &str, home: &Path, fallback: &Path) -> String {
+    let p = Path::new(input);
+    let abs = if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        fallback.join(p)
+    };
+    if let Some(rel) = relative_posix(&abs, home) {
+        return rel;
+    }
+    input.to_string()
 }

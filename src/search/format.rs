@@ -8,6 +8,7 @@
 use crate::search::index::{Meta, SearchHit};
 use colored::Colorize;
 use serde_json::{json, Value};
+use std::path::Path;
 
 pub const JSON_SCHEMA_SEARCH: &str = "ast-outline.search.v1";
 pub const JSON_SCHEMA_RELATED: &str = "ast-outline.related.v1";
@@ -96,22 +97,33 @@ pub fn render_related_json(
     to_json(&v, pretty)
 }
 
-pub fn render_index_stats_text(meta: &Meta, file_count: usize) -> String {
+pub fn render_index_stats_text(meta: &Meta, file_count: usize, home: &Path) -> String {
     let label = |s: &str| format!("{:<8}", s).bold().to_string();
     let dim = |s: String| s.dimmed().to_string();
+    let corpus_display = if meta.indexed_corpus.is_empty() {
+        "(whole repo)".to_string()
+    } else {
+        meta.indexed_corpus.clone()
+    };
     format!(
         "# Index stats\n\
          {schema_l} {schema}\n\
+         {home_l} {home}\n\
+         {corpus_l} {corpus}\n\
          {model_l} {model_id} {dim_suffix}\n\
          {chunks_l} {chunks}\n\
          {files_l} {files}\n\
          {built_l} {created} {unix_tag}\n",
         schema_l = label("Schema:"),
+        home_l = label("Home:"),
+        corpus_l = label("Corpus:"),
         model_l = label("Model:"),
         chunks_l = label("Chunks:"),
         files_l = label("Files:"),
         built_l = label("Built:"),
         schema = meta.schema,
+        home = home.display().to_string().cyan(),
+        corpus = corpus_display.cyan(),
         model_id = meta.model.id.cyan(),
         dim_suffix = dim(format!("(dim {})", meta.model.dim)),
         chunks = meta.chunk_count.to_string().green().bold(),
@@ -121,10 +133,17 @@ pub fn render_index_stats_text(meta: &Meta, file_count: usize) -> String {
     )
 }
 
-pub fn render_index_stats_json(meta: &Meta, file_count: usize, pretty: bool) -> String {
+pub fn render_index_stats_json(
+    meta: &Meta,
+    file_count: usize,
+    home: &Path,
+    pretty: bool,
+) -> String {
     let v = json!({
         "schema": JSON_SCHEMA_INDEX,
         "ast_outline_version": meta.ast_outline_version,
+        "home": home.display().to_string(),
+        "indexed_corpus": meta.indexed_corpus,
         "model_id": meta.model.id,
         "dim": meta.model.dim,
         "chunk_count": meta.chunk_count,
@@ -217,18 +236,42 @@ mod tests {
     #[test]
     fn index_stats_json() {
         let meta = Meta {
-            schema: "ast-outline.search-index.v1".to_string(),
+            schema: "ast-outline.search-index.v2".to_string(),
             ast_outline_version: "0.0.0".to_string(),
             model: ModelMeta { id: "m".into(), dim: 256 },
             created_unix: 42,
             chunk_count: 7,
             embedding_dtype: "f32_le".to_string(),
             tombstones: vec![],
+            indexed_corpus: "packages".to_string(),
         };
-        let v: Value = serde_json::from_str(&render_index_stats_json(&meta, 3, true)).unwrap();
+        let home = Path::new("/r");
+        let v: Value =
+            serde_json::from_str(&render_index_stats_json(&meta, 3, home, true)).unwrap();
         assert_eq!(v["schema"], JSON_SCHEMA_INDEX);
         assert_eq!(v["chunk_count"], 7);
         assert_eq!(v["file_count"], 3);
         assert_eq!(v["created_unix"], 42);
+        assert_eq!(v["home"], "/r");
+        assert_eq!(v["indexed_corpus"], "packages");
+    }
+
+    #[test]
+    fn index_stats_text_includes_home_and_corpus() {
+        let meta = Meta {
+            schema: "ast-outline.search-index.v2".to_string(),
+            ast_outline_version: "0.0.0".to_string(),
+            model: ModelMeta { id: "m".into(), dim: 256 },
+            created_unix: 0,
+            chunk_count: 0,
+            embedding_dtype: "f32_le".to_string(),
+            tombstones: vec![],
+            indexed_corpus: String::new(),
+        };
+        let out = render_index_stats_text(&meta, 0, Path::new("/r"));
+        assert!(out.contains("Home:"));
+        assert!(out.contains("/r"));
+        assert!(out.contains("Corpus:"));
+        assert!(out.contains("(whole repo)"));
     }
 }

@@ -141,7 +141,7 @@ pub fn load_or_build(root: &Path, force_rebuild: bool) -> Result<DepGraph, DepEr
 fn collect_file_records(root: &Path) -> std::io::Result<Vec<crate::search::cache::FileRecord>> {
     use crate::search::cache::{compute_delta, FileRecord, hash_file};
 
-    let delta = compute_delta(root, &[]);
+    let delta = compute_delta(root, root, &[]);
     let mut out = Vec::with_capacity(delta.added.len());
     for path in delta.added {
         let meta = std::fs::metadata(&path)?;

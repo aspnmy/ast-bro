@@ -49,7 +49,7 @@ pub fn load_if_fresh(root: &Path) -> Option<DepGraph> {
     if cf.schema != CACHE_SCHEMA {
         return None;
     }
-    let delta = compute_delta(root, &cf.files);
+    let delta = compute_delta(root, root, &cf.files);
     if delta.requires_rebuild() {
         return None;
     }

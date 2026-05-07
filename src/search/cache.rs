@@ -62,18 +62,28 @@ impl Delta {
     }
 }
 
-/// Walk `repo_root` and compute the delta against `cached_files`.
+/// Walk `walk_root` and compute the delta against `cached_files`.
+///
+/// FileRecord paths are stored relative to the index home, which may be a
+/// parent of `walk_root` when an index covers a subdirectory corpus. Pass
+/// `strip_root = home` so that walked paths get stripped to home-relative
+/// form before comparison. When the corpus equals home, `walk_root ==
+/// strip_root` and behaviour matches the original single-root form.
 ///
 /// Honours `.gitignore` etc. via `ignore::WalkBuilder` and only considers
 /// files that pass `is_indexable`.
-pub fn compute_delta(repo_root: &Path, cached_files: &[FileRecord]) -> Delta {
+pub fn compute_delta(
+    walk_root: &Path,
+    strip_root: &Path,
+    cached_files: &[FileRecord],
+) -> Delta {
     let cached: HashMap<&str, &FileRecord> =
         cached_files.iter().map(|r| (r.path.as_str(), r)).collect();
 
     let mut delta = Delta::default();
     let mut seen: HashSet<String> = HashSet::with_capacity(cached.len());
 
-    let mut builder = WalkBuilder::new(repo_root);
+    let mut builder = WalkBuilder::new(walk_root);
     add_filters(&mut builder);
     let walker = builder.build();
 
@@ -84,7 +94,7 @@ pub fn compute_delta(repo_root: &Path, cached_files: &[FileRecord]) -> Delta {
         }
         // Belt-and-suspenders: skip the hardcoded denylist even when
         // .gitignore / .ast-outline-ignore don't list it.
-        if should_skip_path(path, repo_root) {
+        if should_skip_path(path, walk_root) {
             continue;
         }
         if is_indexable(path).is_none() {
@@ -92,7 +102,7 @@ pub fn compute_delta(repo_root: &Path, cached_files: &[FileRecord]) -> Delta {
         }
         delta.seen_count += 1;
 
-        let rel = match path.strip_prefix(repo_root) {
+        let rel = match path.strip_prefix(strip_root) {
             Ok(r) => normalise_path(r),
             Err(_) => continue,
         };
@@ -194,7 +204,7 @@ mod tests {
         touch(dir.path(), "src/b.py", "def b(): pass");
         touch(dir.path(), "skip.txt", "ignored extension");
 
-        let delta = compute_delta(dir.path(), &[]);
+        let delta = compute_delta(dir.path(), dir.path(), &[]);
         assert_eq!(delta.added.len(), 2, "expected only the 2 indexable files");
         assert_eq!(delta.seen_count, 2);
         assert!(delta.removed.is_empty());
@@ -216,7 +226,7 @@ mod tests {
             chunk_end: 1,
         };
 
-        let delta = compute_delta(dir.path(), &[record]);
+        let delta = compute_delta(dir.path(), dir.path(), &[record]);
         assert!(delta.is_empty());
         assert_eq!(delta.seen_count, 1);
     }
@@ -237,7 +247,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
         fs::write(&path, "fn x() {} // changed").unwrap();
 
-        let delta = compute_delta(dir.path(), &[record]);
+        let delta = compute_delta(dir.path(), dir.path(), &[record]);
         assert_eq!(delta.modified.len(), 1);
     }
 
@@ -257,7 +267,7 @@ mod tests {
             chunk_start: 0,
             chunk_end: 1,
         };
-        let delta = compute_delta(dir.path(), &[record]);
+        let delta = compute_delta(dir.path(), dir.path(), &[record]);
         assert_eq!(delta.mtime_only.len(), 1);
         assert!(delta.modified.is_empty());
         assert!(delta.added.is_empty());
@@ -275,7 +285,7 @@ mod tests {
             chunk_start: 0,
             chunk_end: 0,
         };
-        let delta = compute_delta(dir.path(), &[record]);
+        let delta = compute_delta(dir.path(), dir.path(), &[record]);
         assert_eq!(delta.removed.len(), 1);
         assert_eq!(delta.removed[0], "ghost.rs");
     }
@@ -286,7 +296,7 @@ mod tests {
         touch(dir.path(), "node_modules/lib/index.js", "export {}");
         touch(dir.path(), "src/main.rs", "fn main(){}");
 
-        let delta = compute_delta(dir.path(), &[]);
+        let delta = compute_delta(dir.path(), dir.path(), &[]);
         assert_eq!(delta.added.len(), 1);
         assert!(delta.added[0].ends_with("main.rs"));
     }

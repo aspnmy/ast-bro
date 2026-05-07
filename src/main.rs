@@ -11,6 +11,7 @@ mod installers;
 mod hook;
 mod main_helpers;
 mod mcp;
+mod project_root;
 mod search;
 mod surface;
 
@@ -667,7 +668,9 @@ fn main() {
                 compact,
             } => {
                 if *rebuild {
-                    if let Err(e) = crate::search::index::Index::build(path) {
+                    let cwd = std::env::current_dir()
+                        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+                    if let Err(e) = crate::search::index::Index::build(path, &cwd) {
                         eprintln!("ast-outline: rebuild failed: {e}");
                         std::process::exit(1);
                     }

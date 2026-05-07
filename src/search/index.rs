@@ -1,14 +1,23 @@
 //! Per-repo persistent search index.
 //!
-//! `Index::open(repo_root)` either loads the cached index from
+//! `Index::open(path_arg, cwd)` either loads the cached index from
 //! `.ast-outline/index/` (and refreshes it if files have changed) or builds
-//! one from scratch on first use. After that, `index.search(...)` and
-//! `index.find_related(...)` run the full pipeline:
+//! one from scratch on first use. The home directory is resolved by walking
+//! up from `path_arg` looking for an existing `.ast-outline/index/`, capped
+//! at `cwd` so we never escape the project the user is working in. If no
+//! existing index is found, the index is built at `cwd` (when `path_arg`
+//! is under `cwd`) or at `path_arg` itself otherwise.
 //!
 //! ```text
 //! search:        tokenize → BM25 + dense top-k → RRF → ranking → top-k
+//!                (post-filtered by query_scope when set)
 //! find-related:  resolve chunk → semantic top-k (lang-filtered) → exclude self → top-k
 //! ```
+//!
+//! Schema v2 adds `indexed_corpus` to `meta.json` so search/find_related can
+//! filter results by query scope without conflating it with index location.
+//! v1 metas are read transparently as having `indexed_corpus = ""` (whole
+//! home).
 //!
 //! Phase-7 simplification: any non-empty delta (added / modified / removed)
 //! triggers a full rebuild. The on-disk format reserves the fields needed
@@ -17,6 +26,7 @@
 //! invalidate caches.
 
 use crate::file_filter::{add_filters, should_skip_path};
+use crate::project_root::{relative_posix, resolve_home, Marker};
 use crate::search::bm25::Bm25Index;
 use crate::search::cache::{compute_delta, hash_file, FileRecord};
 use crate::search::chunker::{chunk_file, is_indexable, Chunk};
@@ -36,7 +46,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-const SCHEMA: &str = "ast-outline.search-index.v1";
+/// Current schema version written by all new builds.
+const SCHEMA: &str = "ast-outline.search-index.v2";
+/// Older schema we still read transparently. v1 metas have no
+/// `indexed_corpus` field; we treat that as "whole home".
+const SCHEMA_V1: &str = "ast-outline.search-index.v1";
 
 /// On-disk paths under a repo's `.ast-outline/index/` directory.
 #[derive(Debug, Clone)]
@@ -77,11 +91,17 @@ pub struct Meta {
     pub model: ModelMeta,
     pub created_unix: u64,
     pub chunk_count: u32,
-    /// Always `"f32_le"` for v1. Reserved so a v2 can switch to f16/quantized.
+    /// Always `"f32_le"` for v1/v2. Reserved so a future schema can switch
+    /// to f16/quantized.
     pub embedding_dtype: String,
-    /// Reserved for incremental updates — empty in v1.
+    /// Reserved for incremental updates — empty in v1/v2.
     #[serde(default)]
     pub tombstones: Vec<u32>,
+    /// Subdirectory of `paths.root` that this index covers, as a POSIX path
+    /// (forward slashes, no leading `./`). `""` means the whole home.
+    /// Added in schema v2; defaults to `""` when reading a v1 meta.
+    #[serde(default)]
+    pub indexed_corpus: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +125,9 @@ pub struct SearchOptions {
     pub alpha: Option<f32>,
     /// If set, restrict to chunks whose `language` field is in this set.
     pub languages: Option<Vec<String>>,
+    /// If set, restrict to chunks whose `file_path` starts with this POSIX
+    /// prefix (relative to home). `""` or `None` = no filter.
+    pub query_scope: Option<String>,
 }
 
 impl SearchOptions {
@@ -134,17 +157,20 @@ pub struct Index {
 }
 
 impl Index {
-    /// Open the index at `repo_root`, building if missing or refreshing on
-    /// detected file changes.
-    pub fn open(repo_root: &Path) -> io::Result<Self> {
-        let paths = IndexPaths::from_repo(repo_root);
+    /// Open the index for `path_arg`. Walks up from `path_arg` to `cwd`
+    /// looking for an existing `.ast-outline/index/`; if found, refreshes
+    /// it on detected file changes, otherwise builds at the resolved home.
+    pub fn open(path_arg: &Path, cwd: &Path) -> io::Result<Self> {
+        let (home, _found) = resolve_home(path_arg, cwd, Marker::SearchIndex);
+        let paths = IndexPaths::from_repo(&home);
 
         // Try to load. If anything fails (missing files, schema mismatch,
         // corruption) fall back to a fresh build.
         if paths.meta_json.exists() {
             match Self::load_unlocked(&paths) {
                 Ok(loaded) => {
-                    let delta = compute_delta(&paths.root, &loaded.files);
+                    let corpus_dir = corpus_walk_dir(&paths.root, &loaded.meta.indexed_corpus);
+                    let delta = compute_delta(&corpus_dir, &paths.root, &loaded.files);
                     if !delta.requires_rebuild() {
                         return Ok(loaded);
                     }
@@ -154,6 +180,8 @@ impl Index {
                         delta.modified.len(),
                         delta.removed.len(),
                     );
+                    // Preserve the existing corpus on stale rebuild.
+                    return Self::build_with_corpus(path_arg, cwd, &loaded.meta.indexed_corpus);
                 }
                 Err(e) => {
                     eprintln!("ast-outline: index unreadable ({e}); rebuilding");
@@ -161,12 +189,27 @@ impl Index {
             }
         }
 
-        Self::build(repo_root)
+        Self::build(path_arg, cwd)
     }
 
-    /// Force a full rebuild from scratch. Leaves any existing cache replaced.
-    pub fn build(repo_root: &Path) -> io::Result<Self> {
-        let paths = IndexPaths::from_repo(repo_root);
+    /// Force a full rebuild from scratch. Corpus = `path_arg` relative to
+    /// the resolved home (or `""` when `path_arg == home`).
+    pub fn build(path_arg: &Path, cwd: &Path) -> io::Result<Self> {
+        let (home, _) = resolve_home(path_arg, cwd, Marker::SearchIndex);
+        let corpus = relative_posix(path_arg, &home).unwrap_or_default();
+        Self::build_with_corpus(path_arg, cwd, &corpus)
+    }
+
+    /// Force a full rebuild with an explicit corpus. Used by the corpus
+    /// reconciliation logic in `run_index` and by `Index::open` when
+    /// rebuilding a stale index (preserves the recorded corpus).
+    pub fn build_with_corpus(
+        path_arg: &Path,
+        cwd: &Path,
+        corpus: &str,
+    ) -> io::Result<Self> {
+        let (home, _) = resolve_home(path_arg, cwd, Marker::SearchIndex);
+        let paths = IndexPaths::from_repo(&home);
         fs::create_dir_all(&paths.index_dir)?;
         // Always ensure the .gitignore is present so users don't accidentally
         // commit the cache.
@@ -175,11 +218,22 @@ impl Index {
         let lock_file = acquire_lock(&paths)?;
 
         let started = std::time::Instant::now();
-        eprintln!("ast-outline: building index for {}", paths.root.display());
+        let walk_dir = corpus_walk_dir(&paths.root, corpus);
+        if corpus.is_empty() {
+            eprintln!("ast-outline: building index for {}", paths.root.display());
+        } else {
+            eprintln!(
+                "ast-outline: building index for {} (corpus: {})",
+                paths.root.display(),
+                corpus
+            );
+        }
 
-        // 1. Walk + chunk every indexable file.
+        // 1. Walk + chunk every indexable file under `walk_dir`. Chunk
+        //    file_paths are stored relative to `home` (paths.root) so search
+        //    can post-filter by query_scope without remapping.
         let (file_paths, chunks_per_file): (Vec<PathBuf>, Vec<Vec<Chunk>>) =
-            walk_and_chunk(&paths.root);
+            walk_and_chunk(&walk_dir, &paths.root);
 
         // 2. Build flat chunks vec + per-file chunk_range.
         let mut chunks = Vec::new();
@@ -259,6 +313,7 @@ impl Index {
             chunk_count,
             embedding_dtype: "f32_le".to_string(),
             tombstones: Vec::new(),
+            indexed_corpus: corpus.to_string(),
         };
         write_meta(&paths.meta_json, &meta)?;
         write_bincode(&paths.chunks_bin, &chunks)?;
@@ -289,10 +344,12 @@ impl Index {
     /// Load from disk without delta-checking. Used by `open` and tests.
     fn load_unlocked(paths: &IndexPaths) -> io::Result<Self> {
         let meta: Meta = read_meta(&paths.meta_json)?;
-        if meta.schema != SCHEMA {
+        // Accept current schema and the older v1 (which lacks `indexed_corpus`
+        // — `serde(default)` fills it in as `""` = whole home).
+        if meta.schema != SCHEMA && meta.schema != SCHEMA_V1 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("schema {} != {}", meta.schema, SCHEMA),
+                format!("schema {} not in [{SCHEMA}, {SCHEMA_V1}]", meta.schema),
             ));
         }
         if meta.model.dim as usize != DIM {
@@ -345,8 +402,28 @@ impl Index {
         let alpha = resolve_alpha(query, opts.alpha);
         let candidate_count = opts.top_k * 5;
 
-        // Build language mask once if filtering.
-        let mask = build_language_mask(&self.chunks, opts.languages.as_deref());
+        // Build combined mask: language ∧ query_scope. Either may be None.
+        let mask = build_combined_mask(
+            &self.chunks,
+            opts.languages.as_deref(),
+            opts.query_scope.as_deref(),
+        );
+
+        // Coverage-gap warning: if query_scope is set and points outside the
+        // indexed corpus, results will be empty silently otherwise.
+        if let Some(scope) = opts.query_scope.as_deref() {
+            let corpus = self.meta.indexed_corpus.as_str();
+            if !scope.is_empty()
+                && !corpus.is_empty()
+                && !path_starts_with(scope, corpus)
+                && !path_starts_with(corpus, scope)
+            {
+                eprintln!(
+                    "ast-outline: query scope '{scope}' is outside the indexed corpus '{corpus}' \
+                     — results will be empty. Re-run `ast-outline index .` to widen."
+                );
+            }
+        }
 
         // Semantic top-N.
         let q_embed = self.embedder.encode_one(query);
@@ -413,7 +490,9 @@ impl Index {
         line: u32,
         top_k: usize,
     ) -> Option<Vec<SearchHit>> {
-        self.find_related_opts(file_path, line, top_k, /* dep_boost */ true, /* dep_depth */ 2)
+        self.find_related_opts(
+            file_path, line, top_k, /* dep_boost */ true, /* dep_depth */ 2, None,
+        )
     }
 
     pub fn find_related_opts(
@@ -423,14 +502,17 @@ impl Index {
         top_k: usize,
         dep_boost: bool,
         dep_depth: usize,
+        query_scope: Option<&str>,
     ) -> Option<Vec<SearchHit>> {
         let source_id = resolve_chunk(&self.chunks, file_path, line)?;
         let source = &self.chunks[source_id as usize];
 
-        // Build language-restricted + self-excluding mask.
+        // Build language-restricted + self-excluding (+ scope-filtered) mask.
         let mut mask = vec![false; self.chunks.len()];
         for (i, c) in self.chunks.iter().enumerate() {
-            mask[i] = i as u32 != source_id && c.language == source.language;
+            mask[i] = i as u32 != source_id
+                && c.language == source.language
+                && scope_matches(query_scope, &c.file_path);
         }
 
         // Pull a wider candidate window when boosting so the boost can
@@ -483,17 +565,66 @@ impl Index {
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-fn build_language_mask(chunks: &[Chunk], languages: Option<&[String]>) -> Option<Vec<bool>> {
-    let langs = languages?;
-    if langs.is_empty() {
+/// Combine language + query_scope masks. Returns `None` when neither filter
+/// is active (semantically equivalent to "all chunks pass").
+fn build_combined_mask(
+    chunks: &[Chunk],
+    languages: Option<&[String]>,
+    query_scope: Option<&str>,
+) -> Option<Vec<bool>> {
+    let lang_active = languages.is_some_and(|l| !l.is_empty());
+    let scope_active = query_scope.is_some_and(|s| !s.is_empty());
+    if !lang_active && !scope_active {
         return None;
     }
     Some(
         chunks
             .iter()
-            .map(|c| langs.iter().any(|l| l == &c.language))
+            .map(|c| {
+                let lang_ok = match languages {
+                    Some(langs) if !langs.is_empty() => langs.iter().any(|l| l == &c.language),
+                    _ => true,
+                };
+                let scope_ok = scope_matches(query_scope, &c.file_path);
+                lang_ok && scope_ok
+            })
             .collect(),
     )
+}
+
+/// True when `file_path` is under (or equal to) the `query_scope` prefix.
+/// Empty / `None` scope passes everything.
+fn scope_matches(query_scope: Option<&str>, file_path: &str) -> bool {
+    match query_scope {
+        None => true,
+        Some(s) if s.is_empty() => true,
+        Some(s) => path_starts_with(file_path, s),
+    }
+}
+
+/// Component-wise prefix check. `path_starts_with("packages/a", "packages")`
+/// is true; `path_starts_with("packagesfoo", "packages")` is false.
+fn path_starts_with(child: &str, parent: &str) -> bool {
+    if parent.is_empty() {
+        return true;
+    }
+    if child == parent {
+        return true;
+    }
+    if child.len() <= parent.len() {
+        return false;
+    }
+    child.starts_with(parent) && child.as_bytes()[parent.len()] == b'/'
+}
+
+/// Resolve the absolute directory we should walk for the given corpus.
+/// Empty corpus = the whole home.
+fn corpus_walk_dir(home: &Path, corpus: &str) -> PathBuf {
+    if corpus.is_empty() {
+        home.to_path_buf()
+    } else {
+        home.join(corpus)
+    }
 }
 
 /// Convert a dense scores vector into the top-k `(id, score)` pairs (descending).
@@ -569,10 +700,14 @@ fn enrich_for_bm25(chunk: &Chunk) -> String {
     format!("{} {} {} {}", chunk.content, stem, stem, dir_text)
 }
 
-fn walk_and_chunk(repo_root: &Path) -> (Vec<PathBuf>, Vec<Vec<Chunk>>) {
+/// Walk `walk_root` and return absolute file paths + their chunks.
+/// Chunk `file_path` strings are stored relative to `strip_root` so that a
+/// corpus-narrowed walk still produces stable paths relative to the index
+/// home (used by `query_scope` filtering at search time).
+fn walk_and_chunk(walk_root: &Path, strip_root: &Path) -> (Vec<PathBuf>, Vec<Vec<Chunk>>) {
     // Collect indexable paths first so chunking can run in parallel.
     let mut paths: Vec<PathBuf> = Vec::new();
-    let mut builder = WalkBuilder::new(repo_root);
+    let mut builder = WalkBuilder::new(walk_root);
     add_filters(&mut builder);
     let walker = builder.build();
     for entry in walker.flatten() {
@@ -583,7 +718,7 @@ fn walk_and_chunk(repo_root: &Path) -> (Vec<PathBuf>, Vec<Vec<Chunk>>) {
         if is_indexable(p).is_none() {
             continue;
         }
-        if should_skip_path(p, repo_root) {
+        if should_skip_path(p, walk_root) {
             continue;
         }
         paths.push(p.to_path_buf());
@@ -594,7 +729,7 @@ fn walk_and_chunk(repo_root: &Path) -> (Vec<PathBuf>, Vec<Vec<Chunk>>) {
         .par_iter()
         .map(|p| {
             let rel = p
-                .strip_prefix(repo_root)
+                .strip_prefix(strip_root)
                 .map(normalise_path)
                 .unwrap_or_else(|_| p.display().to_string());
             chunk_file(p, &rel)
@@ -787,24 +922,6 @@ mod tests {
         assert_eq!(top[2].0, 4);
     }
 
-    #[test]
-    fn build_language_mask_filters() {
-        let mk = |lang: &str| Chunk {
-            content: String::new(),
-            file_path: String::new(),
-            start_line: 0,
-            end_line: 0,
-            start_byte: 0,
-            end_byte: 0,
-            language: lang.to_string(),
-        };
-        let chunks = vec![mk("rust"), mk("python"), mk("rust"), mk("go")];
-        let mask = build_language_mask(&chunks, Some(&["rust".to_string()]));
-        assert_eq!(mask, Some(vec![true, false, true, false]));
-        let none = build_language_mask(&chunks, None);
-        assert!(none.is_none());
-    }
-
     /// Smoke test of the persistence round-trip without touching the embedder.
     /// Builds tiny structures by hand, writes, reads back, asserts equality.
     #[test]
@@ -840,6 +957,7 @@ mod tests {
             chunk_count: 1,
             embedding_dtype: "f32_le".to_string(),
             tombstones: Vec::new(),
+            indexed_corpus: String::new(),
         };
 
         write_meta(&paths.meta_json, &meta).unwrap();
@@ -883,7 +1001,7 @@ mod tests {
             "pub struct HandlerStack { items: Vec<u32> }",
         );
 
-        let index = Index::build(dir.path()).expect("build failed");
+        let index = Index::build(dir.path(), dir.path()).expect("build failed");
         assert!(index.chunk_count() >= 3);
 
         // Symbol query: should rank handler.rs first.
@@ -905,7 +1023,63 @@ mod tests {
         assert!(related.iter().all(|h| !h.chunk.file_path.contains("login.rs")));
 
         // Re-open from cache: should detect no changes and skip rebuild.
-        let reopened = Index::open(dir.path()).expect("re-open failed");
+        let reopened = Index::open(dir.path(), dir.path()).expect("re-open failed");
         assert_eq!(reopened.chunk_count(), index.chunk_count());
+    }
+
+    #[test]
+    fn path_starts_with_component_boundary() {
+        assert!(path_starts_with("packages/a", "packages"));
+        assert!(path_starts_with("packages", "packages"));
+        assert!(!path_starts_with("packagesfoo", "packages"));
+        assert!(!path_starts_with("packages", "packages/a"));
+        assert!(path_starts_with("anything", ""));
+    }
+
+    #[test]
+    fn scope_matches_basic() {
+        assert!(scope_matches(None, "src/foo.rs"));
+        assert!(scope_matches(Some(""), "src/foo.rs"));
+        assert!(scope_matches(Some("src"), "src/foo.rs"));
+        assert!(!scope_matches(Some("packages"), "src/foo.rs"));
+    }
+
+    #[test]
+    fn build_combined_mask_returns_none_when_no_filters() {
+        let mk = || Chunk {
+            content: String::new(),
+            file_path: "src/a.rs".to_string(),
+            start_line: 0,
+            end_line: 0,
+            start_byte: 0,
+            end_byte: 0,
+            language: "rust".to_string(),
+        };
+        let chunks = vec![mk()];
+        assert!(build_combined_mask(&chunks, None, None).is_none());
+        assert!(build_combined_mask(&chunks, None, Some("")).is_none());
+    }
+
+    #[test]
+    fn build_combined_mask_combines_lang_and_scope() {
+        let mk = |lang: &str, p: &str| Chunk {
+            content: String::new(),
+            file_path: p.to_string(),
+            start_line: 0,
+            end_line: 0,
+            start_byte: 0,
+            end_byte: 0,
+            language: lang.to_string(),
+        };
+        let chunks = vec![
+            mk("rust", "src/a.rs"),
+            mk("rust", "packages/b.rs"),
+            mk("python", "src/c.py"),
+            mk("rust", "src/d.rs"),
+        ];
+        let mask =
+            build_combined_mask(&chunks, Some(&["rust".to_string()]), Some("src"))
+                .expect("filters active → some mask");
+        assert_eq!(mask, vec![true, false, false, true]);
     }
 }
