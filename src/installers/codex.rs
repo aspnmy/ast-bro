@@ -196,7 +196,7 @@ mod tests {
         .unwrap();
         assert!(contents.starts_with("---\n"));
         assert!(contents.contains("name: ast-outline"));
-        assert!(contents.contains("## Prefer `ast-outline` over full reads"));
+        assert!(contents.contains("## Use `ast-outline` to explore the code"));
     }
 
     #[test]

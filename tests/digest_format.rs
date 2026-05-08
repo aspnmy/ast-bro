@@ -35,10 +35,58 @@ fn digest_starts_with_legend() {
         first.contains("# legend:"),
         "first line should be the legend:\n{first}"
     );
+    // Dynamic legend: only entries for tokens actually present in this output
+    // are listed. The sample fixture has callables and modifiers; it has no
+    // deprecated decls, so `[deprecated]` is correctly omitted.
     assert!(
-        first.contains("name()") && first.contains("[m]") && first.contains("[deprecated]"),
-        "legend should explain the compact tokens:\n{first}"
+        first.contains("name()") && first.contains("[m]"),
+        "legend should explain tokens that appear in this digest:\n{first}"
     );
+}
+
+#[test]
+fn digest_legend_includes_overloads_when_overload_collapse_fires() {
+    // Regression: the legend used to scan the raw IR for `[N×]` in names,
+    // which never appears at that point — overload-collapse runs *inside*
+    // the renderer, after the legend is built. Two adjacent same-name
+    // methods on a type force a collapse; the legend must surface the
+    // `[N×] = N overloads` entry.
+    let dir = std::env::temp_dir().join(format!(
+        "ast-outline-legend-overload-test-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::create_dir_all(&dir);
+    let f = dir.join("ovl.rs");
+    std::fs::write(
+        &f,
+        "pub struct S;\nimpl S {\n    pub fn dup(&self) {}\n    pub fn dup(&self, _: u8) {}\n}\n",
+    )
+    .expect("write");
+    let s = run(&["digest", f.to_str().unwrap()]);
+    let first = s.lines().next().expect("non-empty");
+    assert!(
+        first.contains("[N×]"),
+        "legend should explain `[N×]` when the collapsed digest contains an overload count:\n{first}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn digest_legend_includes_deprecated_only_when_present() {
+    let dir = std::env::temp_dir().join(format!(
+        "ast-outline-legend-test-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::create_dir_all(&dir);
+    let f = dir.join("dep.rs");
+    std::fs::write(&f, "#[deprecated]\npub fn old() {}\n").expect("write");
+    let s = run(&["digest", f.to_str().unwrap()]);
+    let first = s.lines().next().expect("non-empty");
+    assert!(
+        first.contains("[deprecated]"),
+        "legend should include [deprecated] when present:\n{first}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

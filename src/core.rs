@@ -382,10 +382,91 @@ fn _deprecated(d: &Declaration, lang: &str) -> bool {
 
 // --- Renderers ---
 
-/// One-line legend printed above every `digest` output. Tells the
-/// reader (usually an agent) how to decode the compact symbol forms.
-const DIGEST_LEGEND: &str =
-    "# legend: name() = callable · [N×] = N overloads · [m] = modifier · [deprecated] = deprecated\n";
+/// Generate a dynamic legend based on what token types are actually
+/// present in the digest output. Avoids showing tokens that never appear.
+fn _generate_digest_legend(results: &[ParseResult]) -> String {
+    let mut has_callable = false;
+    let mut has_overloads = false;
+    let mut has_modifiers = false;
+    let mut has_deprecated = false;
+
+    for r in results {
+        _scan_siblings_for_legend(
+            &r.declarations,
+            &mut has_callable,
+            &mut has_overloads,
+            &mut has_modifiers,
+            &mut has_deprecated,
+        );
+    }
+
+    let mut entries: Vec<&'static str> = Vec::new();
+    if has_callable {
+        entries.push("name() = callable");
+    }
+    if has_overloads {
+        entries.push("[N×] = N overloads");
+    }
+    if has_modifiers {
+        entries.push("[m] = modifier");
+    }
+    if has_deprecated {
+        entries.push("[deprecated] = deprecated");
+    }
+
+    if entries.is_empty() {
+        return String::new();
+    }
+
+    format!("# legend: {}\n", entries.join(" · "))
+}
+
+/// Walk a list of sibling declarations looking for legend-relevant signals.
+/// `has_overloads` mirrors `_collapse_overloads`'s actual collapse rule
+/// (adjacent same-kind same-name callables in source order) rather than
+/// scanning the rendered name for `[N×]` — the legend runs on the raw IR
+/// before `_collapse_overloads` rewrites any names, so a substring check
+/// would never match.
+fn _scan_siblings_for_legend(
+    siblings: &[Declaration],
+    has_callable: &mut bool,
+    has_overloads: &mut bool,
+    has_modifiers: &mut bool,
+    has_deprecated: &mut bool,
+) {
+    use DeclarationKind::*;
+    if !*has_overloads {
+        for w in siblings.windows(2) {
+            if w[0].kind == w[1].kind
+                && w[0].name == w[1].name
+                && matches!(w[0].kind, Method | Function | Constructor | Destructor | Operator)
+            {
+                *has_overloads = true;
+                break;
+            }
+        }
+    }
+    for d in siblings {
+        if !*has_callable
+            && matches!(d.kind, Method | Function | Constructor | Destructor | Operator)
+        {
+            *has_callable = true;
+        }
+        if !*has_modifiers && !d.modifiers.is_empty() {
+            *has_modifiers = true;
+        }
+        if !*has_deprecated && d.deprecated {
+            *has_deprecated = true;
+        }
+        _scan_siblings_for_legend(
+            &d.children,
+            has_callable,
+            has_overloads,
+            has_modifiers,
+            has_deprecated,
+        );
+    }
+}
 
 /// Map a line count to a coarse size bucket. Lets agents pick whether
 /// to read the file in full or just the digest.
@@ -587,9 +668,30 @@ pub fn render_digest(
         grouped.entry(parent).or_default().push(r);
     }
 
+    // Check if all files failed to parse — surface a batch warning.
+    let all_failed = !results.is_empty() && results.iter().all(|r| r.error_count > 0);
+    let batch_warning = if all_failed {
+        Some(format!(
+            "# BATCH WARNING: All {} files failed to parse — output may be incomplete",
+            results.len()
+        ))
+    } else {
+        None
+    };
+
     // Top-of-output legend so an agent reading the digest cold knows
     // what the compact tokens mean.
-    let mut lines = vec![DIGEST_LEGEND.dimmed().to_string()];
+    let legend = _generate_digest_legend(results);
+    let mut lines = if legend.is_empty() {
+        vec![]
+    } else {
+        vec![legend.dimmed().to_string()]
+    };
+
+    // Batch warning comes after legend but before content.
+    if let Some(warn) = batch_warning {
+        lines.push(warn.red().to_string());
+    }
     for (dir, res) in grouped {
         let rel = dir.strip_prefix(root).unwrap_or(dir);
         lines.push(format!("{}/", rel.display().to_string().cyan().bold()));

@@ -60,7 +60,7 @@ pub fn detect(graph: &DepGraph, min_size: usize) -> Vec<Cycle> {
                 if len == 1 {
                     // Keep singletons that self-edge.
                     let v = comp[0];
-                    if adj[v as usize].iter().any(|&u| u == v) {
+                    if adj[v as usize].contains(&v) {
                         return Some(Cycle {
                             members: vec![nodes[v as usize].clone()],
                         });

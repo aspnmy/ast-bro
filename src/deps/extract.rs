@@ -173,7 +173,7 @@ fn normalise_python(module: &str, dots: usize) -> String {
 fn extract_python_bare(src: &str) -> Vec<RawImport> {
     let mut out = Vec::new();
     let lang = SupportLang::Python;
-    let ast = lang.ast_grep(src.to_string());
+    let ast = lang.ast_grep(src);
     let root = ast.root();
     _walk_python_bare(&root, &mut out);
     out
@@ -228,7 +228,7 @@ fn extract_typescript(src: &str, lang: Lang) -> Vec<RawImport> {
         Lang::JavaScript => SupportLang::JavaScript,
         _ => return Vec::new(),
     };
-    let ast = support.ast_grep(src.to_string());
+    let ast = support.ast_grep(src);
     let root = ast.root();
     let mut out = Vec::new();
     _walk_ts(&root, &mut out);
@@ -365,9 +365,15 @@ fn consume_ts_require<'a, D: Doc>(node: &Node<'a, D>, out: &mut Vec<RawImport>) 
     }
 }
 
-fn strip_quotes(s: &std::borrow::Cow<'_, str>) -> String {
+fn strip_quotes(s: &str) -> String {
     let t = s.trim();
-    if (t.starts_with('"') && t.ends_with('"')) || (t.starts_with('\'') && t.ends_with('\'')) {
+    // Length guard: a single `"` or `'` satisfies both starts_with and
+    // ends_with against itself, but `t[1..t.len() - 1]` would panic on
+    // `1..0`. Require a real pair (>= 2 bytes) before stripping.
+    if t.len() >= 2
+        && ((t.starts_with('"') && t.ends_with('"'))
+            || (t.starts_with('\'') && t.ends_with('\'')))
+    {
         t[1..t.len() - 1].to_string()
     } else {
         t.to_string()
@@ -378,7 +384,7 @@ fn strip_quotes(s: &std::borrow::Cow<'_, str>) -> String {
 
 fn extract_scala(src: &str) -> Vec<RawImport> {
     let lang = SupportLang::Scala;
-    let ast = lang.ast_grep(src.to_string());
+    let ast = lang.ast_grep(src);
     let root = ast.root();
     let mut out = Vec::new();
     _walk_scala(&root, &mut out);
@@ -461,7 +467,7 @@ fn _walk_scala<'a, D: Doc>(node: &Node<'a, D>, out: &mut Vec<RawImport>) {
 
 fn extract_java(src: &str) -> Vec<RawImport> {
     let lang = SupportLang::Java;
-    let ast = lang.ast_grep(src.to_string());
+    let ast = lang.ast_grep(src);
     let root = ast.root();
     let mut out = Vec::new();
     for c in root.children() {
@@ -502,7 +508,7 @@ fn extract_java(src: &str) -> Vec<RawImport> {
 
 fn extract_kotlin(src: &str) -> Vec<RawImport> {
     let lang = SupportLang::Kotlin;
-    let ast = lang.ast_grep(src.to_string());
+    let ast = lang.ast_grep(src);
     let root = ast.root();
     let mut out = Vec::new();
     _walk_kotlin(&root, &mut out);
@@ -555,7 +561,7 @@ fn _walk_kotlin<'a, D: Doc>(node: &Node<'a, D>, out: &mut Vec<RawImport>) {
 
 fn extract_csharp(src: &str) -> Vec<RawImport> {
     let lang = SupportLang::CSharp;
-    let ast = lang.ast_grep(src.to_string());
+    let ast = lang.ast_grep(src);
     let root = ast.root();
     let mut out = Vec::new();
     _walk_csharp(&root, &mut out);
@@ -616,7 +622,7 @@ fn _walk_csharp<'a, D: Doc>(node: &Node<'a, D>, out: &mut Vec<RawImport>) {
 
 fn extract_go(src: &str) -> Vec<RawImport> {
     let lang = SupportLang::Go;
-    let ast = lang.ast_grep(src.to_string());
+    let ast = lang.ast_grep(src);
     let root = ast.root();
     let mut out = Vec::new();
     for c in root.children() {
@@ -659,4 +665,37 @@ fn consume_go_spec<'a, D: Doc>(node: &Node<'a, D>, out: &mut Vec<RawImport>) {
         local_name: name,
         raw_path: Some(stripped),
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_quotes_handles_lone_quote_without_panic() {
+        // Regression: a single `"` or `'` satisfies both starts_with and
+        // ends_with against itself; without a length guard the slice
+        // `t[1..t.len()-1]` would compute `1..0` and panic at runtime.
+        // Real Scala/TS sources can produce lone-quote tokens when an
+        // import path is malformed or a tree-sitter pass skips a child.
+        assert_eq!(strip_quotes("\""), "\"");
+        assert_eq!(strip_quotes("'"), "'");
+        // Whitespace-padded lone quotes still hit the same code path.
+        assert_eq!(strip_quotes("  \"  "), "\"");
+    }
+
+    #[test]
+    fn strip_quotes_strips_paired_quotes() {
+        assert_eq!(strip_quotes("\"hello\""), "hello");
+        assert_eq!(strip_quotes("'world'"), "world");
+        assert_eq!(strip_quotes("  \"x\"  "), "x");
+    }
+
+    #[test]
+    fn strip_quotes_leaves_unquoted_unchanged() {
+        assert_eq!(strip_quotes("foo"), "foo");
+        assert_eq!(strip_quotes(""), "");
+        // Mismatched delimiters: only `"x'` doesn't qualify as paired.
+        assert_eq!(strip_quotes("\"x'"), "\"x'");
+    }
 }

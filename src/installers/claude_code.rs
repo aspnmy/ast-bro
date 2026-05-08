@@ -361,7 +361,7 @@ mod tests {
         let contents = std::fs::read_to_string(&agent_path).unwrap();
         assert!(contents.contains("<!-- ast-outline:begin"));
         // Body is wrapped exactly once — the legacy bare snippet is gone.
-        assert_eq!(contents.matches("## Prefer `ast-outline` over full reads").count(), 1);
+        assert_eq!(contents.matches("## Use `ast-outline` to explore the code").count(), 1);
     }
 
     #[test]
@@ -507,7 +507,7 @@ mod tests {
         assert!(contents.starts_with("---\n"));
         assert!(contents.contains("name: ast-outline"));
         assert!(contents.contains("user-invocable: true"));
-        assert!(contents.contains("## Prefer `ast-outline` over full reads"));
+        assert!(contents.contains("## Use `ast-outline` to explore the code"));
     }
 
     #[test]
@@ -532,7 +532,7 @@ mod tests {
             .unwrap();
         assert!(matches!(change, Change::Updated(_)));
         let contents = std::fs::read_to_string(&skill_path).unwrap();
-        assert!(contents.contains("Prefer `ast-outline`"));
+        assert!(contents.contains("Use `ast-outline`"));
         assert!(!contents.contains("old body"));
     }
 

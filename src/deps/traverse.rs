@@ -4,7 +4,7 @@
 //! adjacency lookup closure.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::deps::graph::{DepEdge, DepGraph, ImportKind};
 
@@ -18,15 +18,15 @@ pub struct DepHit {
 }
 
 /// Forward BFS — what does `start` import (transitively).
-pub fn forward(graph: &DepGraph, start: &PathBuf, max_depth: usize) -> Vec<DepHit> {
-    let edges_at = |p: &PathBuf| graph.forward.get(p).cloned().unwrap_or_default();
+pub fn forward(graph: &DepGraph, start: &Path, max_depth: usize) -> Vec<DepHit> {
+    let edges_at = |p: &Path| graph.forward.get(p).cloned().unwrap_or_default();
     bfs(start, max_depth, edges_at)
 }
 
 /// Reverse BFS — who imports `start` (transitively).
-pub fn reverse(graph: &DepGraph, start: &PathBuf, max_depth: usize, limit: usize) -> Vec<DepHit> {
+pub fn reverse(graph: &DepGraph, start: &Path, max_depth: usize, limit: usize) -> Vec<DepHit> {
     let rev = graph.reverse_adjacency();
-    let edges_at = |p: &PathBuf| {
+    let edges_at = |p: &Path| {
         rev.get(p)
             .cloned()
             .unwrap_or_default()
@@ -47,16 +47,17 @@ pub fn reverse(graph: &DepGraph, start: &PathBuf, max_depth: usize, limit: usize
     all
 }
 
-fn bfs<F: Fn(&PathBuf) -> Vec<DepEdge>>(
-    start: &PathBuf,
+fn bfs<F: Fn(&Path) -> Vec<DepEdge>>(
+    start: &Path,
     max_depth: usize,
     edges_at: F,
 ) -> Vec<DepHit> {
     let mut out = Vec::new();
     let mut seen: HashSet<PathBuf> = HashSet::new();
     let mut q: VecDeque<(PathBuf, usize)> = VecDeque::new();
-    q.push_back((start.clone(), 0));
-    seen.insert(start.clone());
+    let start_buf = start.to_path_buf();
+    q.push_back((start_buf.clone(), 0));
+    seen.insert(start_buf);
     while let Some((cur, depth)) = q.pop_front() {
         if depth >= max_depth {
             continue;
@@ -81,14 +82,15 @@ fn bfs<F: Fn(&PathBuf) -> Vec<DepEdge>>(
 /// graph — used by `find-related` for dep-aware boosting.
 pub fn neighbourhood_depths(
     graph: &DepGraph,
-    source: &PathBuf,
+    source: &Path,
     max_depth: usize,
 ) -> HashMap<PathBuf, usize> {
     let mut depths: HashMap<PathBuf, usize> = HashMap::new();
-    depths.insert(source.clone(), 0);
+    let source_buf = source.to_path_buf();
+    depths.insert(source_buf.clone(), 0);
     let rev = graph.reverse_adjacency();
     let mut q: VecDeque<(PathBuf, usize)> = VecDeque::new();
-    q.push_back((source.clone(), 0));
+    q.push_back((source_buf, 0));
     while let Some((cur, d)) = q.pop_front() {
         if d >= max_depth {
             continue;

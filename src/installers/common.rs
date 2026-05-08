@@ -17,6 +17,7 @@ pub fn install_prompt_in(
     opts: &InstallOpts,
 ) -> Result<Change, String> {
     let existing = read_optional(path)?.unwrap_or_default();
+
     let body = snippet.trim_end_matches('\n').to_string() + "\n";
     let (new_contents, outcome) = marker_block::apply(
         &existing,
@@ -32,6 +33,14 @@ pub fn install_prompt_in(
             path.display(),
             diff
         )),
+        ApplyOutcome::Appended
+            if !opts.force && marker_block::has_unmanaged_brand_content(&existing) =>
+        {
+            Err(format!(
+                "{}: user-written ast-outline content outside marker block; pass --force to overwrite",
+                path.display()
+            ))
+        }
         _ => {
             if existing == new_contents {
                 return Ok(Change::Skipped {
@@ -66,6 +75,7 @@ pub fn install_subagent_in(
     // When the file doesn't exist yet, seed `existing` with the frontmatter so
     // marker_block::apply appends the block after it rather than at offset 0.
     let existing = if is_new { frontmatter.to_string() } else { on_disk.clone() };
+
     let body = snippet.trim_end_matches('\n').to_string() + "\n";
     let (new_contents, outcome) = marker_block::apply(
         &existing,
@@ -81,6 +91,20 @@ pub fn install_subagent_in(
             path.display(),
             diff
         )),
+        // `!is_new` is defense-in-depth: when the file doesn't exist yet,
+        // `on_disk` is empty and `has_unmanaged_brand_content` would return
+        // false anyway, but skipping the call also makes the intent clear —
+        // the snippet-shape guard only protects pre-existing user content.
+        // The seeded `frontmatter` is content *we* control, so it would be
+        // wrong to flag it as a "user-written conflict" even hypothetically.
+        ApplyOutcome::Appended
+            if !opts.force && !is_new && marker_block::has_unmanaged_brand_content(&on_disk) =>
+        {
+            Err(format!(
+                "{}: user-written ast-outline content outside marker block; pass --force to overwrite",
+                path.display()
+            ))
+        }
         _ => {
             if on_disk == new_contents {
                 return Ok(Change::Skipped {
@@ -356,4 +380,60 @@ pub fn status_for_prompt_only(prompt_path: Option<&Path>) -> Status {
         }
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn install_prompt_rejects_existing_snippet_like_content() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("CLAUDE.md");
+        // User pasted snippet-shaped content (backticked brand) without our markers.
+        std::fs::write(&path, "Use `ast-outline` to explore the code.\n").unwrap();
+        let err = install_prompt_in(&path, "## Snippet\n", &InstallOpts::default()).unwrap_err();
+        assert!(err.contains("user-written ast-outline content outside marker block"));
+        // File must not be touched on rejection.
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(after, "Use `ast-outline` to explore the code.\n");
+    }
+
+    #[test]
+    fn install_prompt_force_overrides_snippet_check() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("CLAUDE.md");
+        std::fs::write(&path, "Use `ast-outline` to explore.\n").unwrap();
+        let opts = InstallOpts { force: true, ..Default::default() };
+        let change = install_prompt_in(&path, "## Snippet\n", &opts).unwrap();
+        assert!(matches!(change, Change::Updated(_)));
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert!(after.contains("<!-- ast-outline:begin"));
+        // Original line is preserved above the new block.
+        assert!(after.starts_with("Use `ast-outline` to explore.\n"));
+    }
+
+    #[test]
+    fn install_prompt_allows_unrelated_existing_content() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("CLAUDE.md");
+        std::fs::write(&path, "# My project notes\nNothing branded here.\n").unwrap();
+        let change = install_prompt_in(&path, "## Snippet\n", &InstallOpts::default()).unwrap();
+        assert!(matches!(change, Change::Updated(_)));
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert!(after.contains("<!-- ast-outline:begin"));
+    }
+
+    #[test]
+    fn install_prompt_allows_casual_prose_mention() {
+        // Plain prose mention isn't snippet-shaped — install should proceed.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("CLAUDE.md");
+        std::fs::write(&path, "Our team uses ast-outline among other tools.\n").unwrap();
+        let change = install_prompt_in(&path, "## Snippet\n", &InstallOpts::default()).unwrap();
+        assert!(matches!(change, Change::Updated(_)));
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert!(after.contains("<!-- ast-outline:begin"));
+    }
 }

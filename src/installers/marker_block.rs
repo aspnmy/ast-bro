@@ -68,6 +68,57 @@ pub fn remove(file_contents: &str) -> (String, bool) {
     (file_contents.to_string(), false)
 }
 
+/// True if the file looks like it already contains a hand-rolled copy of the
+/// ast-outline agent snippet outside any managed marker block. Used to warn
+/// before the auto-installer creates a second, marker-wrapped copy alongside
+/// the manual one.
+///
+/// Casual prose mentions of "ast-outline" (e.g. project README references)
+/// don't trigger — we look for snippet-shaped patterns: a backticked
+/// `\`ast-outline\`` token (markdown code-formatted) or a CLI invocation
+/// `ast-outline <subcommand>`. Both are characteristic of pasted instructions
+/// and rare in incidental documentation.
+pub fn has_unmanaged_brand_content(content: &str) -> bool {
+    fn looks_like_snippet(text: &str) -> bool {
+        // Backticked code reference: `ast-outline` or `ast-outline …`.
+        if text.contains("`ast-outline") {
+            return true;
+        }
+        // CLI invocation: `ast-outline ` followed by a known subcommand. Keep
+        // the list narrow — these are the most distinctive shape tokens.
+        const SUBCOMMANDS: &[&str] = &[
+            "outline",
+            "digest",
+            "show",
+            "implements",
+            "surface",
+            "deps",
+            "reverse-deps",
+            "cycles",
+            "graph",
+            "search",
+            "find-related",
+            "index",
+            "prompt",
+            "mcp",
+        ];
+        for sub in SUBCOMMANDS {
+            let needle = format!("ast-outline {}", sub);
+            if text.contains(&needle) {
+                return true;
+            }
+        }
+        false
+    }
+
+    if let Some((begin, end)) = find_block(content) {
+        looks_like_snippet(&content[..begin.line_start])
+            || looks_like_snippet(&content[end.line_end..])
+    } else {
+        looks_like_snippet(content)
+    }
+}
+
 pub fn installed_version(file_contents: &str) -> Option<String> {
     let (start, _) = find_block(file_contents)?;
     let header = &file_contents[start.line_start..start.body_start];
@@ -235,5 +286,54 @@ mod tests {
     fn installed_version_extracts_v_tag() {
         let (with_block, _) = apply("", BODY, BODY, "", "1.2.3", false);
         assert_eq!(installed_version(&with_block), Some("1.2.3".to_string()));
+    }
+
+    #[test]
+    fn has_unmanaged_brand_content_flags_backticked_reference() {
+        assert!(has_unmanaged_brand_content("Use `ast-outline` to explore.\n"));
+    }
+
+    #[test]
+    fn has_unmanaged_brand_content_flags_cli_invocation() {
+        assert!(has_unmanaged_brand_content("Run `ast-outline outline src/`.\n"));
+        assert!(has_unmanaged_brand_content("ast-outline digest .\n"));
+    }
+
+    #[test]
+    fn has_unmanaged_brand_content_ignores_casual_prose_mention() {
+        // A plain prose mention ("we use ast-outline") is not a pasted snippet
+        // and shouldn't block the install.
+        assert!(!has_unmanaged_brand_content(
+            "Our team uses ast-outline and other tools.\n"
+        ));
+        assert!(!has_unmanaged_brand_content("Just normal docs.\n"));
+        assert!(!has_unmanaged_brand_content(""));
+    }
+
+    #[test]
+    fn has_unmanaged_brand_content_ignores_content_inside_block() {
+        // Mention only inside marker block → managed, not loose.
+        let (with_block, _) = apply(
+            "",
+            "Use `ast-outline` here.\n",
+            "Use `ast-outline` here.\n",
+            "",
+            "1.0.0",
+            false,
+        );
+        assert!(!has_unmanaged_brand_content(&with_block));
+    }
+
+    #[test]
+    fn has_unmanaged_brand_content_finds_snippet_outside_block() {
+        let (with_block, _) = apply(
+            "I already pasted `ast-outline` instructions manually here.\n",
+            BODY,
+            BODY,
+            "",
+            "1.0.0",
+            false,
+        );
+        assert!(has_unmanaged_brand_content(&with_block));
     }
 }
