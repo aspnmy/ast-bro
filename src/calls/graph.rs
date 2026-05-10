@@ -85,9 +85,7 @@ impl CallTarget {
             Self::Bare(s) => format!("[unresolved] {}", s),
         }
     }
-    pub fn is_resolved(&self) -> bool {
-        matches!(self, Self::Resolved(_))
-    }
+
     /// Bare callee identifier — the qn's terminal name when resolved, or
     /// the raw string for External/Bare. Used by the incremental updater
     /// to demote a stale Resolved edge back to Bare without losing the
@@ -277,15 +275,5 @@ impl CallGraph {
         self.reverse = rev;
     }
 
-    /// Repo-relative path display helper (POSIX separators).
-    pub fn rel(&self, p: &std::path::Path) -> String {
-        match p.strip_prefix(&self.root) {
-            Ok(r) => r
-                .components()
-                .map(|c| c.as_os_str().to_string_lossy().into_owned())
-                .collect::<Vec<_>>()
-                .join("/"),
-            Err(_) => p.display().to_string(),
-        }
-    }
+
 }

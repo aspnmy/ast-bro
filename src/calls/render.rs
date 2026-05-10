@@ -6,8 +6,8 @@
 //!   - symbol qns   → yellow (terminal name) on a dimmed scope prefix
 //!   - confidence   → green=Exact, yellow=Inferred, red=Ambiguous
 //!   - external/unresolved tags → cyan/red
-//! `colored` honours `NO_COLOR=1` automatically so the e2e tests stay
-//! whitespace-stable.
+//!   - `colored` honours `NO_COLOR=1` automatically so the e2e tests stay
+//!   - whitespace-stable.
 
 use crate::calls::graph::{CallEdge, CallGraph, CallTarget, Confidence, Qn};
 use crate::calls::traverse::CallHit;

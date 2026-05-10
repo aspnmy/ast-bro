@@ -73,9 +73,11 @@ pub fn build_call_graph(root: &Path, deps: &DepGraph) -> CallGraph {
     graph.rebuild_reverse();
 
     // Stats roll-up.
-    let mut stats = crate::calls::graph::GraphStats::default();
-    stats.function_count = graph.forward.len();
-    stats.type_count = graph.types.len();
+    let mut stats = crate::calls::graph::GraphStats {
+        function_count: graph.forward.len(),
+        type_count: graph.types.len(),
+        ..Default::default()
+    };
     for edges in graph.forward.values() {
         for e in edges {
             stats.edge_count += 1;
@@ -116,7 +118,6 @@ fn normalise_type_name(name: &str) -> String {
 /// re-extract individual files without re-walking the project.
 pub fn extract_file(root: &Path, file: &Path) -> Option<FilePass> {
     let parse = parse_file_for_hook(file)?;
-    let language = parse.language;
     let rel = file_rel(root, file);
 
     let mut defined = Vec::new();
@@ -133,10 +134,9 @@ pub fn extract_file(root: &Path, file: &Path) -> Option<FilePass> {
         &mut types,
     );
 
-    Some(FilePass {
-        file: file.to_path_buf(),
-        language,
-        defined,
+     Some(FilePass {
+         file: file.to_path_buf(),
+         defined,
         callable_locations,
         imports: parse.imports,
         raw_edges,

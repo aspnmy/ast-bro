@@ -13,7 +13,6 @@ use std::path::{Path, PathBuf};
 /// (unresolved) call-edges. Phase 2 in `resolve.rs` joins these globally.
 pub struct FilePass {
     pub file: PathBuf,
-    pub language: &'static str,
     /// All qns this file defines — top-level + nested. Order matters only
     /// for stable output; pass A consumes as a set.
     pub defined: Vec<Qn>,

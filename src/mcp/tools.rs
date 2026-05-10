@@ -587,7 +587,6 @@ struct DepsArgs {
     file: PathBuf,
     #[serde(default = "default_depth")] depth: usize,
     #[serde(default)] external: bool,
-    #[serde(default)] rebuild: bool,
     #[serde(default)] json: bool,
 }
 
@@ -596,7 +595,6 @@ struct ReverseDepsArgs {
     file: PathBuf,
     #[serde(default = "default_depth")] depth: usize,
     #[serde(default = "default_limit")] limit: usize,
-    #[serde(default)] rebuild: bool,
     #[serde(default)] json: bool,
 }
 
@@ -604,7 +602,6 @@ struct ReverseDepsArgs {
 struct CyclesArgs {
     #[serde(default = "default_path")] path: PathBuf,
     #[serde(default = "default_min_size")] min_size: usize,
-    #[serde(default)] rebuild: bool,
     #[serde(default)] json: bool,
 }
 
@@ -613,7 +610,6 @@ struct GraphArgs {
     #[serde(default = "default_path")] path: PathBuf,
     #[serde(default)] json: bool,
     #[serde(default)] include_external: bool,
-    #[serde(default)] rebuild: bool,
 }
 
 fn default_depth() -> usize { 3 }
