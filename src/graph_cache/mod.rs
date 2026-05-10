@@ -15,6 +15,7 @@
 //! a rebuild; further moving the file is unnecessary churn.
 
 pub mod cache;
+pub mod delta;
 pub mod shared;
 
 pub use shared::{get_or_init, promote_calls};

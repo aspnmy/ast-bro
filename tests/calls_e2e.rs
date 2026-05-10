@@ -443,3 +443,139 @@ fn callers_unknown_symbol_returns_error() {
         stderr
     );
 }
+
+// ---------- Per-file invalidation tests ----------
+//
+// Each of these builds the cache by running a query, mutates a single file,
+// re-runs the query (without `--rebuild`), and asserts the in-memory graph
+// reflects the change without the user opting into a rebuild. The cache file
+// is written to `.ast-outline/deps/graph.bin` under each fixture root.
+
+fn cache_mtime(root: &std::path::Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(root.join(".ast-outline/deps/graph.bin"))
+        .ok()?
+        .modified()
+        .ok()
+}
+
+// All per-file invalidation tests below mutate file *content* between the
+// prime and re-query steps, with the new size differing from the old.
+// Delta detection in `src/search/cache.rs` triggers on mismatched
+// `(mtime, size)` and (when only mtime matched) on a content-hash mismatch
+// — so a size-bumping edit always fires the delta path regardless of
+// filesystem mtime resolution. No explicit sleep needed.
+
+#[test]
+fn deps_partial_invalidation_picks_up_new_import() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write(&root.join("Cargo.toml"), "[package]\nname=\"x\"\nversion=\"0.0.0\"\nedition=\"2021\"\n");
+    write(&root.join("src/lib.rs"), "pub mod a; pub mod b;\n");
+    write(&root.join("src/a.rs"), "pub fn ping() {}\n");
+    write(&root.join("src/b.rs"), "// no imports yet\n");
+
+    // Prime the cache.
+    let (out, code) = run_in(root, &["deps", "src/b.rs"]);
+    assert_eq!(code, 0, "first deps call failed: {out}");
+    let cache_before = cache_mtime(root).expect("cache should exist after first call");
+
+    // Edit b.rs to import a. Bump mtime so delta detection fires reliably.
+    write(&root.join("src/b.rs"), "use crate::a;\npub fn pong() { a::ping(); }\n");
+
+    // Same query without --rebuild should pick up the new edge.
+    let (out2, code2) = run_in(root, &["deps", "src/b.rs"]);
+    assert_eq!(code2, 0, "second deps call failed: {out2}");
+    assert!(
+        out2.contains("a.rs"),
+        "expected new edge to a.rs after partial invalidation, got:\n{out2}"
+    );
+    let cache_after = cache_mtime(root).expect("cache should still exist");
+    assert!(
+        cache_after >= cache_before,
+        "cache should have been re-saved after delta",
+    );
+}
+
+#[test]
+fn deps_partial_invalidation_drops_removed_file() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write(&root.join("Cargo.toml"), "[package]\nname=\"x\"\nversion=\"0.0.0\"\nedition=\"2021\"\n");
+    write(&root.join("src/lib.rs"), "pub mod a; pub mod gone;\n");
+    write(&root.join("src/a.rs"), "use crate::gone;\npub fn run() { gone::say(); }\n");
+    write(&root.join("src/gone.rs"), "pub fn say() {}\n");
+
+    // Prime + verify the edge exists.
+    let (out, _) = run_in(root, &["deps", "src/a.rs"]);
+    assert!(out.contains("gone.rs"), "baseline missing gone.rs: {out}");
+
+    // Remove gone.rs and the lib mod declaration so it's truly gone from the index.
+    std::fs::remove_file(root.join("src/gone.rs")).unwrap();
+    write(&root.join("src/lib.rs"), "pub mod a;\n");
+
+    // Re-query reverse-deps on a.rs — the partial update should have dropped
+    // gone.rs entirely; asking reverse-deps for it should error out.
+    let (_, code) = run_in(root, &["reverse-deps", "src/gone.rs"]);
+    assert_eq!(code, 2, "removed file should not be part of dep graph anymore");
+}
+
+#[test]
+fn calls_partial_invalidation_demotes_stale_target() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write(&root.join("Cargo.toml"), "[package]\nname=\"x\"\nversion=\"0.0.0\"\nedition=\"2021\"\n");
+    write(&root.join("src/lib.rs"), "pub mod a; pub mod b;\n");
+    write(&root.join("src/a.rs"), "pub fn helper() {}\n");
+    write(
+        &root.join("src/b.rs"),
+        "use crate::a::helper;\npub fn caller() { helper(); }\n",
+    );
+
+    // Prime the calls graph.
+    let (out, code) = run_in(root, &["callers", "helper", "."]);
+    assert_eq!(code, 0, "first callers failed: {out}");
+    assert!(out.contains("caller"), "baseline missing caller: {out}");
+
+    // Rename helper -> renamed in a.rs; b.rs's edge to helper now points to
+    // a qn that doesn't exist anymore. The partial path demotes it to Bare.
+    write(&root.join("src/a.rs"), "pub fn renamed() {}\n");
+
+    // After invalidation, `helper` no longer matches any callable — query
+    // for it should now fail (the qn is gone from symbol_table).
+    let (_, code2) = run_in(root, &["callers", "helper", "."]);
+    assert_eq!(
+        code2, 2,
+        "helper should be unknown after rename; got exit {code2}"
+    );
+
+    // The renamed function should be discoverable.
+    let (out3, code3) = run_in(root, &["callers", "renamed", "."]);
+    assert_eq!(code3, 0, "renamed lookup failed: {out3}");
+}
+
+#[test]
+fn calls_partial_invalidation_picks_up_new_caller() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write(&root.join("Cargo.toml"), "[package]\nname=\"x\"\nversion=\"0.0.0\"\nedition=\"2021\"\n");
+    write(&root.join("src/lib.rs"), "pub mod a;\n");
+    write(&root.join("src/a.rs"), "pub fn helper() {}\npub fn first() { helper(); }\n");
+
+    // Prime — `helper` has one caller.
+    let (out, _) = run_in(root, &["callers", "helper", "."]);
+    assert!(out.contains("first"), "baseline missing first: {out}");
+    assert!(!out.contains("second"), "second should not exist yet: {out}");
+
+    // Add a second caller in the same file.
+    write(
+        &root.join("src/a.rs"),
+        "pub fn helper() {}\npub fn first() { helper(); }\npub fn second() { helper(); }\n",
+    );
+
+    let (out2, code2) = run_in(root, &["callers", "helper", "."]);
+    assert_eq!(code2, 0, "second callers failed: {out2}");
+    assert!(
+        out2.contains("first") && out2.contains("second"),
+        "expected both first and second after partial invalidation, got:\n{out2}"
+    );
+}

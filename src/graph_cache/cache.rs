@@ -8,8 +8,9 @@
 
 use crate::core::JSON_SCHEMA_GRAPH_INDEX;
 use crate::deps::build_graph;
+use crate::graph_cache::delta::{apply_delta_to_calls, apply_delta_to_deps, refresh_records};
 use crate::graph_cache::UnifiedGraph;
-use crate::search::cache::{compute_delta, hash_file, FileRecord};
+use crate::search::cache::{compute_delta, hash_file, Delta, FileRecord};
 use bincode::serde::{decode_from_slice, encode_to_vec};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -42,20 +43,49 @@ pub fn lock_path(root: &Path) -> PathBuf {
     cache_dir(root).join("lock")
 }
 
-/// Try to read a fresh cache for `root`. Returns `None` if the cache
-/// doesn't exist, has the wrong schema, or is stale per `compute_delta`.
-pub fn load_if_fresh(root: &Path) -> Option<UnifiedGraph> {
+/// Outcome of trying to load the on-disk cache. The `Stale` variant carries
+/// enough state for an incremental update — caller can choose to apply the
+/// delta in place rather than rebuilding from scratch.
+pub enum LoadOutcome {
+    /// Cache exists, schema matches, no files changed.
+    Fresh(UnifiedGraph),
+    /// Cache exists and schema matches, but files changed on disk. The
+    /// `delta` distinguishes added / modified / removed / mtime_only so a
+    /// per-file patcher can apply only the diff.
+    Stale {
+        graph: UnifiedGraph,
+        delta: Delta,
+        prev_records: Vec<FileRecord>,
+    },
+    /// No cache, schema mismatch, or unreadable file — caller must rebuild.
+    Missing,
+}
+
+/// Read the cache and compute its delta against the working tree. Splits
+/// the freshness decision (this fn) from the rebuild-vs-patch decision
+/// (the caller, in `load_or_build`).
+pub fn load_with_delta(root: &Path) -> LoadOutcome {
     let path = cache_path(root);
-    let bytes = fs::read(&path).ok()?;
-    let (cf, _): (CacheFile, _) = decode_from_slice(&bytes, bincode::config::standard()).ok()?;
+    let bytes = match fs::read(&path) {
+        Ok(b) => b,
+        Err(_) => return LoadOutcome::Missing,
+    };
+    let cf: CacheFile = match decode_from_slice(&bytes, bincode::config::standard()) {
+        Ok((cf, _)) => cf,
+        Err(_) => return LoadOutcome::Missing,
+    };
     if cf.schema != CACHE_SCHEMA {
-        return None;
+        return LoadOutcome::Missing;
     }
     let delta = compute_delta(root, root, &cf.files);
-    if delta.requires_rebuild() {
-        return None;
+    if !delta.requires_rebuild() {
+        return LoadOutcome::Fresh(cf.graph);
     }
-    Some(cf.graph)
+    LoadOutcome::Stale {
+        graph: cf.graph,
+        delta,
+        prev_records: cf.files,
+    }
 }
 
 /// Build a fresh `UnifiedGraph` (deps half only — call graph is materialised
@@ -68,14 +98,44 @@ pub fn build_and_save(root: &Path) -> std::io::Result<UnifiedGraph> {
     Ok(graph)
 }
 
-/// Load from cache when fresh; otherwise build + persist.
+/// Load from cache when possible; on a stale cache try a per-file patch
+/// (covering both halves), only falling back to a full rebuild when the
+/// patch fails. `force_rebuild` skips the cache entirely.
 pub fn load_or_build(root: &Path, force_rebuild: bool) -> std::io::Result<UnifiedGraph> {
-    if !force_rebuild {
-        if let Some(g) = load_if_fresh(root) {
-            return Ok(g);
-        }
+    if force_rebuild {
+        return build_and_save(root);
     }
-    build_and_save(root)
+    match load_with_delta(root) {
+        LoadOutcome::Fresh(g) => Ok(g),
+        LoadOutcome::Stale {
+            mut graph,
+            delta,
+            prev_records,
+        } => {
+            // Deps half: per-file patch. Failure (e.g. an extractor erroring)
+            // falls back to a full rebuild so the user's query still succeeds.
+            if apply_delta_to_deps(&mut graph.deps, root, &delta).is_err() {
+                return build_and_save(root);
+            }
+            // Calls half: only patch when the on-disk cache had it. A
+            // None calls field stays None; the next callers/callees query
+            // promotes it via the existing lazy path.
+            if graph.calls.is_some() {
+                let deps_snapshot = graph.deps.clone();
+                if let Some(calls) = graph.calls.as_mut() {
+                    apply_delta_to_calls(calls, &deps_snapshot, root, &delta);
+                }
+            }
+            // Persist the patched graph + refreshed fingerprints. Best-effort:
+            // a write failure leaves the in-memory state correct for this
+            // session and the on-disk cache slightly stale (next launch will
+            // re-detect the same delta and re-patch).
+            let new_records = refresh_records(prev_records, root, &delta);
+            let _ = save(root, &graph, &new_records);
+            Ok(graph)
+        }
+        LoadOutcome::Missing => build_and_save(root),
+    }
 }
 
 /// Persist a graph + file fingerprints atomically. Writes via `.tmp` +

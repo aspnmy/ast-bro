@@ -88,6 +88,16 @@ impl CallTarget {
     pub fn is_resolved(&self) -> bool {
         matches!(self, Self::Resolved(_))
     }
+    /// Bare callee identifier — the qn's terminal name when resolved, or
+    /// the raw string for External/Bare. Used by the incremental updater
+    /// to demote a stale Resolved edge back to Bare without losing the
+    /// originally observed callee text.
+    pub fn name_or_raw(&self) -> String {
+        match self {
+            Self::Resolved(qn) => qn.name().to_string(),
+            Self::External(s) | Self::Bare(s) => s.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,13 +113,22 @@ pub struct CallEdge {
     /// `Foo` for `Foo::bar()` or `Foo.bar()` — i.e. the unit-struct value
     /// case). Lets `callers <Type>` find usages where the type appears as
     /// a receiver but no construction syntax was used.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ///
+    /// No `skip_serializing_if` — see `DepEdge::local_name` for the
+    /// bincode positional-encoding rationale. Skipping a field corrupts
+    /// the entire cache round-trip silently.
+    #[serde(default)]
     pub receiver: Option<String>,
     /// All candidates considered when `Confidence::Ambiguous`. Empty
-    /// otherwise — saves cache size in the common case.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// otherwise. Same no-skip rule as `receiver`.
+    #[serde(default)]
     pub candidates: Vec<Qn>,
 }
+
+// `CallEdge::target.name_or_raw()` is the only consumer surface — kept on
+// `CallTarget` itself so the incremental updater can reach it without
+// unwrapping the variant. No `target_name_or_bare()` shortcut: it would
+// just re-export an existing one-line method.
 
 /// Serializable mirror of `crate::core::CallKind`. We keep this separate to
 /// avoid putting `Deserialize` on the public IR type and to keep the cache

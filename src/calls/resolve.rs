@@ -27,10 +27,12 @@ pub struct Resolved {
     pub symbol_table: HashMap<String, Vec<Qn>>,
 }
 
-pub fn run(root: &Path, deps: &DepGraph, passes: Vec<FilePass>) -> Resolved {
-    // ---------- Build the global symbol table once. ----------
+/// Build the global `bare-name → Vec<Qn>` table from a slice of passes.
+/// Lifted out of `run` so incremental updates can rebuild the table from
+/// (cached + new) passes without going through the full resolver.
+pub fn build_symbol_table(passes: &[FilePass]) -> HashMap<String, Vec<Qn>> {
     let mut symbol_table: HashMap<String, Vec<Qn>> = HashMap::new();
-    for fp in &passes {
+    for fp in passes {
         for qn in &fp.defined {
             symbol_table
                 .entry(qn.name().to_string())
@@ -42,7 +44,25 @@ pub fn run(root: &Path, deps: &DepGraph, passes: Vec<FilePass>) -> Resolved {
         v.sort_by(|a, b| a.0.cmp(&b.0));
         v.dedup();
     }
+    symbol_table
+}
 
+pub fn run(root: &Path, deps: &DepGraph, passes: Vec<FilePass>) -> Resolved {
+    let symbol_table = build_symbol_table(&passes);
+    run_with_table(root, deps, passes, symbol_table)
+}
+
+/// Resolve `passes`'s raw edges against a *prebuilt* symbol_table (which
+/// must include every qn the resolver should be allowed to see). The
+/// incremental path passes the full project's symbol_table here while
+/// only handing in raw edges from changed files — so new edges in changed
+/// files still resolve to qns defined elsewhere in the project.
+pub fn run_with_table(
+    root: &Path,
+    deps: &DepGraph,
+    passes: Vec<FilePass>,
+    symbol_table: HashMap<String, Vec<Qn>>,
+) -> Resolved {
     // ---------- Suffix index for import resolution (reused from deps). ----------
     let aliases = detect_aliases(root);
     let suffix_idx = build_suffix_index(root);

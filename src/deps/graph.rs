@@ -62,11 +62,21 @@ pub struct DepEdge {
     pub line: u32,
     /// Local binding the importer sees (`as Quux`, `using A = X.Y`).
     /// `None` when the import preserves the original name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ///
+    /// No `skip_serializing_if` here on purpose: `DepEdge` is serialized
+    /// into the bincode cache, which uses positional encoding. A skipped
+    /// field breaks decoding — the next byte is interpreted as this
+    /// field's discriminant, throwing the entire downstream read off by
+    /// one. (We learned this the hard way: the cache silently failed to
+    /// round-trip and `load_if_fresh` quietly fell through to "rebuild
+    /// from scratch every time", which is exactly the per-file
+    /// invalidation regression we shipped this change to fix.)
+    #[serde(default)]
     pub local_name: Option<String>,
     /// Dotted/source path before resolution. Useful for inner-class
     /// display ("com.foo.Bar.Inner") and to keep raw context for debugging.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// See `local_name` above for why no `skip_serializing_if`.
+    #[serde(default)]
     pub raw_path: Option<String>,
 }
 

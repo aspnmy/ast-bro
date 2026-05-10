@@ -15,10 +15,14 @@ pub const JSON_SCHEMA_DEPS_INDEX: &str = "ast-outline.deps-index.v1";
 pub const JSON_SCHEMA_CALLERS: &str = "ast-outline.callers.v1";
 pub const JSON_SCHEMA_CALLEES: &str = "ast-outline.callees.v1";
 /// Unified on-disk cache holding both the file-level dep graph and (lazily)
-/// the symbol-level call graph. Bumped from the prior `deps-index.v1` to
-/// force a rebuild for users upgrading: the cache file shape now wraps
-/// `UnifiedGraph` instead of bare `DepGraph`.
-pub const JSON_SCHEMA_GRAPH_INDEX: &str = "ast-outline.graph-index.v1";
+/// the symbol-level call graph. Bumped from `graph-index.v1` to `v2` after
+/// the per-file-invalidation work removed `skip_serializing_if` from
+/// `DepEdge` and `CallEdge` Option/Vec fields — bincode uses positional
+/// encoding so a skipped field corrupts everything that follows. v1 caches
+/// were silently un-decodable (the loader returned `None` and rebuilt
+/// every time, masking the bug). The v2 bump ensures upgrading users get
+/// a clean rebuild rather than continuing to hit the silent fallback.
+pub const JSON_SCHEMA_GRAPH_INDEX: &str = "ast-outline.graph-index.v2";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy, Default)]
 pub enum DeclarationKind {

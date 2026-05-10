@@ -141,6 +141,13 @@ fn normalise_type_name(name: &str) -> String {
     name.to_string()
 }
 
+/// Public re-export of `extract_file` for the incremental updater in
+/// `crate::graph_cache::delta`. Internal callers use the private name to
+/// keep the build pipeline's surface narrow.
+pub fn extract_file_pub(root: &Path, file: &Path) -> Option<FilePass> {
+    extract_file(root, file)
+}
+
 /// Phase 1 per-file: parse, walk Declarations, emit qns + raw edges + types.
 fn extract_file(root: &Path, file: &Path) -> Option<FilePass> {
     let parse = parse_file_for_hook(file)?;
