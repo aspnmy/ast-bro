@@ -58,8 +58,6 @@ Stop at the step that answers the question:
 - `deps`, `reverse-deps` → expect a **file** path
 - `graph`, `cycles` → expect a **directory** (repo root)
 - `callers`, `callees` → symbol first, optional **directory** (defaults to `.`)
-
-Fall back to a full read only when you need context beyond the body `show` returned. If the map header contains `# WARNING: N parse errors`, the map for that file is partial — read the source directly for the affected region.
 "#;
 
 /// YAML frontmatter for the Claude Code skill file. Concatenated with
