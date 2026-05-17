@@ -5,6 +5,8 @@ Fast, AST-based **code-navigation toolkit** for source files — surface the *sh
 [ast-outline](https://github.com/aeroxy/ast-outline) is written in Rust and uses [ast-grep](https://github.com/ast-grep/ast-grep)’s incredibly fast [tree-sitter](https://github.com/tree-sitter/tree-sitter) bindings. Thanks to [rayon](https://github.com/rayon-rs/rayon), it parses your entire workspace concurrently—often in milliseconds. For Google- or ByteDance-scale monorepos, [ast-outline](https://github.com/aeroxy/ast-outline) benefits from the additional abstraction layer provided by [repolayer](https://github.com/zhousiyao03-cyber/repolayer).
 
 [![crates.io](https://img.shields.io/crates/v/ast-outline.svg)](https://crates.io/crates/ast-outline)
+[![npm](https://img.shields.io/npm/v/@ast-outline/cli)](https://www.npmjs.com/package/@ast-outline/cli)
+[![PyPI](https://img.shields.io/pypi/v/ast-outline-cli)](https://pypi.org/project/ast-outline-cli/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/aeroxy/ast-outline)
 
@@ -106,6 +108,18 @@ Want to see exactly what ast-outline walks? Compare `ast-outline digest some/dir
 
 ```bash
 brew install aeroxy/tap/ast-outline
+```
+
+### npm
+
+```bash
+npm install -g @ast-outline/cli
+```
+
+### pip
+
+```bash
+pip install ast-outline-cli
 ```
 
 ### Cargo

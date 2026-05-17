@@ -1,4 +1,4 @@
-.PHONY: build release check run test clean bump-patch bump-minor bump-major update-formula
+.PHONY: build release check run test clean bump-patch bump-minor bump-major update-formula publish-npm publish-pypi setup-pypi
 
 ## Build the project (debug)
 build:
@@ -37,6 +37,10 @@ bump-patch:
 	sed -i '' "s/^version = \"$$old\"/version = \"$$new\"/" Cargo.toml; \
 	sed -i '' "s/version \"$$old\"/version \"$$new\"/" Formula/ast-outline.rb; \
 	sed -i '' "s|/$$old/|/$$new/|g" Formula/ast-outline.rb; \
+	sed -i '' "s/^version = \"$$old\"/version = \"$$new\"/" cli-python/pyproject.toml; \
+	sed -i '' "s/VERSION = \"$$old\"/VERSION = \"$$new\"/" cli-python/ast_outline_cli/__init__.py; \
+	sed -i '' "s/\"version\": \"$$old\"/\"version\": \"$$new\"/" cli-typescript/package.json; \
+	sed -i '' "s/const VERSION = \"$$old\"/const VERSION = \"$$new\"/" cli-typescript/bin/install.js; \
 	echo "$$old → $$new"
 
 ## Bump the minor version (0.1.4 → 0.2.0) and update all version references
@@ -48,6 +52,10 @@ bump-minor:
 	sed -i '' "s/^version = \"$$old\"/version = \"$$new\"/" Cargo.toml; \
 	sed -i '' "s/version \"$$old\"/version \"$$new\"/" Formula/ast-outline.rb; \
 	sed -i '' "s|/$$old/|/$$new/|g" Formula/ast-outline.rb; \
+	sed -i '' "s/^version = \"$$old\"/version = \"$$new\"/" cli-python/pyproject.toml; \
+	sed -i '' "s/VERSION = \"$$old\"/VERSION = \"$$new\"/" cli-python/ast_outline_cli/__init__.py; \
+	sed -i '' "s/\"version\": \"$$old\"/\"version\": \"$$new\"/" cli-typescript/package.json; \
+	sed -i '' "s/const VERSION = \"$$old\"/const VERSION = \"$$new\"/" cli-typescript/bin/install.js; \
 	echo "$$old → $$new"
 
 ## Bump the major version (0.1.4 → 1.0.0) and update all version references
@@ -58,6 +66,10 @@ bump-major:
 	sed -i '' "s/^version = \"$$old\"/version = \"$$new\"/" Cargo.toml; \
 	sed -i '' "s/version \"$$old\"/version \"$$new\"/" Formula/ast-outline.rb; \
 	sed -i '' "s|/$$old/|/$$new/|g" Formula/ast-outline.rb; \
+	sed -i '' "s/^version = \"$$old\"/version = \"$$new\"/" cli-python/pyproject.toml; \
+	sed -i '' "s/VERSION = \"$$old\"/VERSION = \"$$new\"/" cli-python/ast_outline_cli/__init__.py; \
+	sed -i '' "s/\"version\": \"$$old\"/\"version\": \"$$new\"/" cli-typescript/package.json; \
+	sed -i '' "s/const VERSION = \"$$old\"/const VERSION = \"$$new\"/" cli-typescript/bin/install.js; \
 	echo "$$old → $$new"
 
 ## Update Formula/ast-outline.rb SHA256 from local release zip (run after release-macos, before upload)
@@ -69,3 +81,16 @@ update-formula:
 	echo "macOS SHA256: $$mac_sha"; \
 	sed -i '' "s/sha256 \"[a-f0-9]*\"/sha256 \"$$mac_sha\"/" Formula/ast-outline.rb; \
 	echo "Formula/ast-outline.rb updated"
+
+## Publish @ast-outline/cli to npm
+publish-npm:
+	cd cli-typescript && npm publish
+
+## Setup Python venv for cli-python (run once)
+setup-pypi:
+	python3 -m venv cli-python/venv
+	cli-python/venv/bin/pip install build twine httpx
+
+## Build and publish ast-outline-cli to PyPI
+publish-pypi:
+	cd cli-python && venv/bin/python -m build && venv/bin/twine upload dist/*

@@ -2,7 +2,7 @@
 name = "ast-outline"
 version = "2.1.0"
 edition = "2021"
-description = "Fast, AST-based structural outline for source files. Built for LLM coding agents and humans."
+description = "Fast, AST-based code-navigation toolkit for source files. Built for LLM coding agents and humans."
 authors = ["Aero <aero.windwalker@gmail.com>"]
 repository = "https://github.com/aeroxy/ast-outline"
 license = "MIT"

@@ -1,0 +1,36 @@
+{
+  "name": "@ast-outline/cli",
+  "version": "2.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Fast, AST-based code-navigation toolkit — downloads the binary on install",
+  "bin": {
+    "ast-outline": "bin/ast-outline.js"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node bin/install.js"
+  },
+  "keywords": [
+    "ast",
+    "code-outline",
+    "tree-sitter",
+    "llm",
+    "coding-agent",
+    "dependency-graph",
+    "call-graph",
+    "semantic-search",
+    "code-navigation",
+    "mcp"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aeroxy/ast-outline.git"
+  },
+  "homepage": "https://github.com/aeroxy/ast-outline"
+}

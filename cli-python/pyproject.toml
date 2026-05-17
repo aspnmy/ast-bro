@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ast-outline-cli"
+version = "2.1.0"
+description = "Fast, AST-based code-navigation toolkit — downloads the Rust binary on install"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+dependencies = [
+    "httpx>=0.24.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/aeroxy/ast-outline"
+Repository = "https://github.com/aeroxy/ast-outline"
+Documentation = "https://github.com/aeroxy/ast-outline#readme"
+
+[project.scripts]
+ast-outline = "ast_outline_cli:main"
