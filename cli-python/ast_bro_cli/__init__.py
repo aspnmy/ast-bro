@@ -57,7 +57,9 @@ def download_binary() -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     os_name, arch = get_platform()
-    ext = ".zip" if os_name == "windows" else ".tar.gz"
+    # All platform release artifacts are `.zip` (same archive Homebrew pulls).
+    # If we ever ship a Linux `.tar.gz` build, branch here on os_name.
+    ext = ".zip"
     binary_ext = ".exe" if os_name == "windows" else ""
     binary_path = cache_dir / f"{BINARY_NAME}{binary_ext}"
 

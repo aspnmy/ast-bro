@@ -5,10 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ast-bro"
 version = "2.2.0"
-description = "Fast, AST-based code-navigation toolkit — downloads the Rust binary on install"
+description = "Fast, AST-based code-navigation: shape, public API, deps & call graphs, hybrid semantic search, structural rewrite. MCP server included."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"
+keywords = ["ast", "tree-sitter", "mcp", "refactoring", "code-search"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = [
     "httpx>=0.24.0",
 ]

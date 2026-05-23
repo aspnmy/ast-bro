@@ -1,56 +1,68 @@
-# ast-outline-cli
+# ast-bro
 
-[![PyPI](https://img.shields.io/pypi/v/ast-outline-cli)](https://pypi.org/project/ast-outline-cli/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/aeroxy/ast-outline/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/ast-bro)](https://pypi.org/project/ast-bro/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/aeroxy/ast-bro/blob/main/LICENSE)
 
-CLI installer for [ast-outline](https://github.com/aeroxy/ast-outline) — a fast, AST-based code-navigation toolkit for source files. Downloads the pre-built Rust binary on first run.
+PyPI installer for [ast-bro](https://github.com/aeroxy/ast-bro) — a fast, AST-based code-navigation toolkit for source files (shape, public API, dep & call graphs, hybrid semantic search, structural rewrite, MCP server). Downloads the pre-built Rust binary on first run.
+
+> **Formerly `ast-outline-cli`.** Same project under a new name (the `ast-outline` name became overloaded after the tool grew beyond outlining). The `ast-outline` command is still installed as a thin proxy that forwards to `ast-bro`, so existing scripts keep working.
 
 ## Install
 
 ```bash
-pip install ast-outline-cli
+pip install ast-bro
 ```
+
+This installs three commands, all forwarding to the same binary:
+
+- `ast-bro` — canonical name
+- `sb` — short alias (same tool, fewer keystrokes)
+- `ast-outline` — backward-compat shim
 
 ## Usage
 
 ```bash
 # Map the structure of a file (signatures + line ranges, no bodies)
-ast-outline map src/player.rs
+ast-bro map src/player.rs
 
 # Show the exact source of a specific method
-ast-outline show Player.cs TakeDamage
+ast-bro show Player.cs TakeDamage
 
 # Compact digest of a whole module
-ast-outline digest src/services/
+ast-bro digest src/services/
 
 # True public API (resolves pub use / __all__ re-exports)
-ast-outline surface .
+ast-bro surface .
 
 # Find all implementations of a type
-ast-outline implements IDamageable src/
+ast-bro implements IDamageable src/
 
 # Dependency graph
-ast-outline deps src/auth.rs --depth 2
-ast-outline reverse-deps src/auth.rs
-ast-outline cycles
+ast-bro deps src/auth.rs --depth 2
+ast-bro reverse-deps src/auth.rs
+ast-bro cycles
 
 # Call graph (AST-accurate)
-ast-outline callers TakeDamage
-ast-outline callees Player.TakeDamage
+ast-bro callers TakeDamage
+ast-bro callees Player.TakeDamage
 
 # Hybrid BM25 + dense semantic search
-ast-outline search "how does login work"
+ast-bro search "how does login work"
 
 # Find semantically similar code
-ast-outline find-related src/auth/login.rs:42
+ast-bro find-related src/auth/login.rs:42
+
+# AST-aware structural search and rewrite (with metavariables)
+ast-bro run -p '$FUNC($$$)' -l rust
+ast-bro run -p 'foo($A)' -r 'bar($A)' --write    # apply to disk
 ```
 
-On first run, the CLI downloads the pre-built binary for your platform from [GitHub releases](https://github.com/aeroxy/ast-outline/releases) and caches it locally.
+On first run, the CLI downloads the pre-built binary for your platform from [GitHub releases](https://github.com/aeroxy/ast-bro/releases) and caches it locally.
 
 | Platform | Cache directory |
 |---|---|
-| macOS | `~/Library/Caches/ast-outline/` |
-| Linux | `~/.cache/ast-outline/` |
+| macOS | `~/Library/Caches/ast-bro/` |
+| Linux | `~/.cache/ast-bro/` |
 
 ## Supported Platforms
 
@@ -62,28 +74,29 @@ On first run, the CLI downloads the pre-built binary for your platform from [Git
 For unsupported platforms, build from source:
 
 ```bash
-cargo install ast-outline
+cargo install ast-bro
 ```
 
-## What is ast-outline?
+## What is ast-bro?
 
-[ast-outline](https://github.com/aeroxy/ast-outline) is a fast, AST-based code-navigation toolkit built for LLM coding agents and humans. It uses [tree-sitter](https://github.com/tree-sitter/tree-sitter) via [ast-grep](https://github.com/ast-grep/ast-grep) to parse source files and provide:
+[ast-bro](https://github.com/aeroxy/ast-bro) is a fast, AST-based code-navigation toolkit built for LLM coding agents and humans. It uses [tree-sitter](https://github.com/tree-sitter/tree-sitter) via [ast-grep](https://github.com/ast-grep/ast-grep) to parse source files and provide:
 
 - **File shape** — `map` / `digest` / `show` for signatures with line ranges (95% token savings vs reading full files)
 - **True public API** — `surface` resolves re-export graphs across Rust, Python, TypeScript, and more
 - **Dependency graph** — `deps` / `reverse-deps` / `cycles` / `graph` for import analysis
 - **Call graph** — `callers` / `callees` with AST accuracy across 14 languages
 - **Semantic search** — hybrid BM25 + dense embeddings via `search` and `find-related`
+- **Structural rewrite** — `run` for AST-aware pattern matching with metavariables (find + replace)
 - **MCP server** — every command exposed as an MCP tool for LLM agents
 
-Supports Rust, Python, TypeScript, JavaScript, Java, C#, Kotlin, Scala, Go, PHP, Ruby, SQL, and Markdown.
+Supports Rust, Python, TypeScript, JavaScript, Java, C#, C++, Kotlin, Scala, Go, PHP, Ruby, SQL, and Markdown.
 
 ## Links
 
-- [ast-outline source code](https://github.com/aeroxy/ast-outline)
-- [npm package](https://www.npmjs.com/package/@ast-outline/cli) (Node.js installer)
-- [crates.io](https://crates.io/crates/ast-outline) (Rust library)
+- [ast-bro source code](https://github.com/aeroxy/ast-bro)
+- [npm package](https://www.npmjs.com/package/@ast-bro/cli) (Node.js installer)
+- [crates.io](https://crates.io/crates/ast-bro) (Rust library)
 
 ## License
 
-[MIT](https://github.com/aeroxy/ast-outline/blob/main/LICENSE)
+[MIT](https://github.com/aeroxy/ast-bro/blob/main/LICENSE)
