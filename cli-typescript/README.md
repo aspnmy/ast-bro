@@ -1,16 +1,16 @@
-# ast-bro
+# @ast-bro/cli
 
-[![npm](https://img.shields.io/npm/v/ast-bro)](https://www.npmjs.com/package/ast-bro)
+[![npm](https://img.shields.io/npm/v/@ast-bro/cli)](https://www.npmjs.com/package/@ast-bro/cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/aeroxy/ast-bro/blob/main/LICENSE)
 
 npm installer for [ast-bro](https://github.com/aeroxy/ast-bro) — a fast, AST-based code-navigation toolkit for source files (shape, public API, dep & call graphs, hybrid semantic search, structural rewrite, MCP server). Downloads the pre-built Rust binary on install.
 
-> **Renamed from `@ast-outline/cli`.** This package was previously published as `@ast-outline/cli` on npm. The `ast-outline` command is still installed as a thin proxy that forwards to `ast-bro`, so existing scripts keep working.
+> **Formerly `@ast-outline/cli`.** Same project under a new scope (the `ast-outline` name became overloaded after the tool grew beyond outlining). The `ast-outline` command is still installed as a thin proxy that forwards to `ast-bro`, so existing scripts keep working.
 
 ## Install
 
 ```bash
-npm install -g ast-bro
+npm install -g @ast-bro/cli
 ```
 
 This installs three commands, all forwarding to the same binary:

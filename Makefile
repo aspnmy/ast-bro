@@ -85,9 +85,9 @@ update-formula:
 	sed -i '' "s/sha256 \"[a-f0-9]*\"/sha256 \"$$mac_sha\"/" Formula/ast-bro.rb; \
 	echo "Formula/ast-bro.rb updated"
 
-## Publish ast-bro to npm
+## Publish @ast-bro/cli to npm
 publish-npm:
-	cd cli-typescript && npm publish
+	cd cli-typescript && npm publish --access public
 
 ## Setup Python venv for cli-python (run once)
 setup-pypi:

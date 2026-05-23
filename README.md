@@ -5,7 +5,7 @@ Fast, AST-based **code-navigation toolkit** for source files — surface the *sh
 [ast-bro](https://github.com/aeroxy/ast-bro) is written in Rust and uses [ast-grep](https://github.com/ast-grep/ast-grep)’s incredibly fast [tree-sitter](https://github.com/tree-sitter/tree-sitter) bindings. Thanks to [rayon](https://github.com/rayon-rs/rayon), it parses your entire workspace concurrently—often in milliseconds. For Google- or ByteDance-scale monorepos, [ast-bro](https://github.com/aeroxy/ast-bro) benefits from the additional abstraction layer provided by [repolayer](https://github.com/zhousiyao03-cyber/repolayer).
 
 [![crates.io](https://img.shields.io/crates/v/ast-bro.svg)](https://crates.io/crates/ast-bro)
-[![npm](https://img.shields.io/npm/v/ast-bro)](https://www.npmjs.com/package/ast-bro)
+[![npm](https://img.shields.io/npm/v/@ast-bro/cli)](https://www.npmjs.com/package/@ast-bro/cli)
 [![PyPI](https://img.shields.io/pypi/v/ast-bro)](https://pypi.org/project/ast-bro/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/aeroxy/ast-bro)
@@ -117,7 +117,7 @@ brew install aeroxy/tap/ast-bro
 ### npm
 
 ```bash
-npm install -g ast-bro
+npm install -g @ast-bro/cli
 ```
 
 ### pip
