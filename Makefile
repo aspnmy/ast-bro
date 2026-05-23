@@ -7,7 +7,10 @@ build:
 ## Release build — use this before manual testing
 release:
 	cargo build --release
-	zip -j target/release/ast-bro-macos-arm64.zip target/release/ast-bro
+	zip -j target/release/ast-bro-macos-arm64.zip \
+	    target/release/ast-bro \
+	    target/release/ast-outline \
+	    target/release/sb
 
 ## Type-check without producing a binary
 check:
