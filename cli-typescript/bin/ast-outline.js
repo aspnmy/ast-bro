@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * ast-bro CLI wrapper — forwards arguments to the Rust binary.
+ * ast-outline CLI wrapper (final 2.1.1 release) — forwards arguments to the Rust binary.
  */
 
 const { execFileSync } = require("child_process");

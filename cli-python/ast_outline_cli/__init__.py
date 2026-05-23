@@ -1,4 +1,4 @@
-"""ast-bro CLI installer — downloads the Rust binary on first run."""
+"""ast-outline CLI installer (final 2.1.1 release) — downloads the Rust binary on first run."""
 
 import os
 import sys
@@ -9,9 +9,9 @@ from pathlib import Path
 
 import httpx
 
-VERSION = "2.2.0"
+VERSION = "2.1.1"
 GITHUB_REPO = "aeroxy/ast-bro"
-BINARY_NAME = "ast-bro"
+BINARY_NAME = "ast-outline"
 
 
 def get_cache_dir() -> Path:

@@ -1,14 +1,14 @@
 {
-  "name": "@ast-bro/cli",
-  "version": "2.2.0",
+  "name": "@ast-outline/cli",
+  "version": "2.1.1",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Fast, AST-based code-navigation toolkit — downloads the binary on install",
+  "description": "Final ast-outline release. Renamed to ast-bro — install @ast-bro/cli. Ships ast-bro and sb binaries alongside ast-outline.",
   "bin": {
-    "ast-bro": "bin/ast-bro.js",
-    "ast-outline": "bin/ast-bro.js",
-    "sb": "bin/ast-bro.js"
+    "ast-outline": "bin/ast-outline.js",
+    "ast-bro": "bin/ast-outline.js",
+    "sb": "bin/ast-outline.js"
   },
   "files": [
     "bin",

@@ -1,15 +1,17 @@
-# Pinned to the last pre-rename release. New versions ship as ast-bro.rb.
-# Kept for backward compatibility — existing `brew install ast-outline` users
-# will continue to get this formula.
+# Final ast-outline release (2.1.1) — installs ast-outline and the new
+# ast-bro / sb commands together so existing users can transition.
+# New versions ship as ast-bro.rb.
 class AstOutline < Formula
-  desc "Fast AST-based code-navigation toolkit: shape, surface, deps, search"
-  homepage "https://github.com/aeroxy/ast-outline"
-  url "https://github.com/aeroxy/ast-outline/releases/download/2.1.0/ast-outline-macos-arm64.zip"
-  sha256 "c0e3be2da5da9b40f6fc3f3568f6bbe5b7d73224085b7975a9d9fba3b0a2f598"
+  desc "Final ast-outline release; renamed to ast-bro. Ships ast-bro and sb alongside."
+  homepage "https://github.com/aeroxy/ast-bro"
+  url "https://github.com/aeroxy/ast-bro/releases/download/2.1.1/ast-outline-macos-arm64.zip"
+  sha256 "e153fc2a65c41ea35e1dd0e7e87ca3d4ec914be6614bbcb5d12cfbe473cc2089"
   license "MIT"
 
   def install
     bin.install "ast-outline"
+    bin.install_symlink "ast-outline" => "ast-bro"
+    bin.install_symlink "ast-outline" => "sb"
   end
 
   test do

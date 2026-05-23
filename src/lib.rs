@@ -21,9 +21,20 @@ mod surface;
 use crate::core::{DigestOptions, MapOptions, ParseResult};
 
 #[derive(Parser)]
-#[command(name = "ast-bro")]
+#[command(name = "ast-outline")]
 #[command(version)]
 #[command(about = "Fast, AST-based structural outline for source files", long_about = None)]
+#[command(after_help = "\
+DISCONTINUED — `ast-outline` has been renamed to `ast-bro`. This 2.1.1 release \
+is the final version under the old name. The `ast-bro` and `sb` commands ship \
+with this release so you can start using them immediately. To switch fully:\n\
+\n\
+  cargo install ast-bro\n\
+  npm install -g @ast-bro/cli\n\
+  pip install ast-bro\n\
+  brew install aeroxy/tap/ast-bro\n\
+\n\
+Repo: https://github.com/aeroxy/ast-bro")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

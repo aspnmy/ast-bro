@@ -3,15 +3,15 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ast-bro"
-version = "2.2.0"
-description = "Fast, AST-based code-navigation: shape, public API, deps & call graphs, hybrid semantic search, structural rewrite. MCP server included."
+name = "ast-outline-cli"
+version = "2.1.1"
+description = "Final ast-outline release. Renamed to ast-bro — install via `pip install ast-bro`. Ships ast-bro and sb binaries alongside ast-outline."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"
-keywords = ["ast", "tree-sitter", "mcp", "refactoring", "code-search"]
+keywords = ["ast", "outline", "tree-sitter", "llm", "cli"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 7 - Inactive",
     "Intended Audience :: Developers",
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
@@ -29,6 +29,6 @@ Repository = "https://github.com/aeroxy/ast-bro"
 Documentation = "https://github.com/aeroxy/ast-bro#readme"
 
 [project.scripts]
-ast-bro = "ast_bro_cli:main"
-ast-outline = "ast_bro_cli:main"
-sb = "ast_bro_cli:main"
+ast-outline = "ast_outline_cli:main"
+ast-bro = "ast_outline_cli:main"
+sb = "ast_outline_cli:main"
