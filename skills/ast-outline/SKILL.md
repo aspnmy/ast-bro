@@ -4,9 +4,7 @@ description: Fast AST-based structural outline for source code. Use to explore u
 user-invocable: true
 ---
 
-## Use `sb` (the `ast-bro` toolkit; formerly `ast-outline`) to explore the code
-
-`sb` is the short alias for the `ast-bro` binary — same tool, fewer keystrokes. The legacy `ast-outline` command is still installed as a thin proxy, so either name works; prefer `sb` in your commands.
+## Use sb to explore the code
 
 Usage: sb <COMMAND> [OPTIONS]
 
