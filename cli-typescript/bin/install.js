@@ -67,7 +67,9 @@ function downloadBinary() {
   }
 
   const { osName, archName } = getPlatform();
-  const ext = osName === "windows" ? ".zip" : ".tar.gz";
+  // All platform release artifacts are `.zip` (same archive Homebrew pulls).
+  // If we ever ship a Linux `.tar.gz` build, branch here on osName.
+  const ext = ".zip";
   const url = `https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/${BINARY_NAME}-${osName}-${archName}${ext}`;
 
   console.log(`Downloading ast-bro ${VERSION} for ${osName}-${archName}...`);

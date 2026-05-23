@@ -12,7 +12,7 @@ Fast, AST-based **code-navigation toolkit** for source files — surface the *sh
 
 > **Renamed from `ast-outline` (v2.1.x and earlier).** The project outgrew "outline" — it now ships dep graphs, call graphs, hybrid semantic search, true public API resolution, and a structural search/rewrite engine, not just structural outlining. The old name also collided with an unrelated [VS Code extension](https://marketplace.visualstudio.com/items?itemName=cancerberosgx.vscode-typescript-ast-outline) and an [npm package](https://www.npmjs.com/package/ast-outline) — too generic to keep.
 >
-> **Upgrading from `ast-outline`?** Run any `ast-bro` command once and it will auto-migrate `.ast-outline/` → `.ast-bro/` (cache), `.ast-outline-ignore` → `.ast-bro-ignore` (per-repo filter), `~/.cache/ast-outline/` → `~/.cache/ast-bro/` (model cache), and any `ast-outline` entries in your MCP config → `ast-bro`. The legacy `ast-outline` binary is still installed as a thin proxy that execs into `ast-bro`, so existing scripts keep working.
+> **Upgrading from `ast-outline`?** Run any `ast-bro` command once and it will auto-migrate `.ast-outline/` → `.ast-bro/` (cache), `.ast-outline-ignore` → `.ast-bro-ignore` (per-repo filter), `~/.cache/ast-outline/` → `~/.cache/ast-bro/` (model cache), and any `ast-outline` entries in your MCP config → `ast-bro`. The legacy `ast-outline` binary is still installed as a thin proxy that execs into `ast-bro`, and a shorter `sb` alias ships alongside, so existing scripts keep working.
 
 ---
 
