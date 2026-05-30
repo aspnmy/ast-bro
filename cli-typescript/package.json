@@ -1,10 +1,10 @@
 {
   "name": "@ast-bro/cli",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Fast, AST-based code-navigation toolkit — downloads the binary on install",
+  "description": "Fast, AST-based code-navigation and log-squeezing toolkit — downloads the binary on install",
   "bin": {
     "ast-bro": "bin/ast-bro.js",
     "ast-outline": "bin/ast-bro.js",
@@ -18,6 +18,8 @@
     "postinstall": "node bin/install.js"
   },
   "keywords": [
+    "ast-bro",
+    "ast-outline",
     "ast",
     "code-outline",
     "tree-sitter",
@@ -27,7 +29,8 @@
     "call-graph",
     "semantic-search",
     "code-navigation",
-    "mcp"
+    "mcp",
+    "squeeze"
   ],
   "license": "MIT",
   "repository": {

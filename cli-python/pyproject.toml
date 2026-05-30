@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ast-bro"
-version = "2.2.0"
-description = "Fast, AST-based code-navigation: shape, public API, deps & call graphs, hybrid semantic search, structural rewrite. MCP server included."
+version = "2.3.0"
+description = "Fast, AST-based code-navigation: shape, public API, deps & call graphs, hybrid semantic search, structural rewrite, and log squeezing. MCP server included."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.8"
-keywords = ["ast", "tree-sitter", "mcp", "refactoring", "code-search"]
+keywords = ["ast", "ast-outline", "tree-sitter", "mcp", "refactoring", "code-search"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
