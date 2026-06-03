@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx
 
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 GITHUB_REPO = "aeroxy/ast-bro"
 BINARY_NAME = "ast-bro"
 
