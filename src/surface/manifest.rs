@@ -5,7 +5,7 @@
 //! - `[package].name` for the crate name
 //! - `[lib].path` for an explicit lib root
 //! - `[[bin]].path` (and the matching `name`) for binary roots
-//! - `[workspace].members` for workspace fan-out
+//! - `[workspace].members` / `[workspace].exclude` for workspace fan-out
 //! - `[project].name` for Python pkg name
 //!
 //! The parser is strict-enough-for-our-needs: it understands sections,
@@ -22,6 +22,7 @@ pub struct CargoManifest {
     pub lib_path: Option<PathBuf>,
     pub bins: Vec<BinTarget>,
     pub workspace_members: Vec<String>,
+    pub workspace_exclude: Vec<String>,
     pub manifest_dir: PathBuf,
 }
 
@@ -93,7 +94,10 @@ pub fn parse_cargo_toml(path: &Path) -> Option<CargoManifest> {
             section = format!("[{}]", hdr);
             if hdr == "[bin]" {
                 section = "[[bin]]".to_string();
-                current_bin = Some(BinTarget { name: None, path: None });
+                current_bin = Some(BinTarget {
+                    name: None,
+                    path: None,
+                });
             }
             continue;
         }
@@ -105,15 +109,11 @@ pub fn parse_cargo_toml(path: &Path) -> Option<CargoManifest> {
         };
 
         match section.as_str() {
-            "[package]" => {
-                if key == "name" {
-                    m.package_name = _unquote(value);
-                }
+            "[package]" if key == "name" => {
+                m.package_name = _unquote(value);
             }
-            "[lib]" => {
-                if key == "path" {
-                    m.lib_path = _unquote(value).map(PathBuf::from);
-                }
+            "[lib]" if key == "path" => {
+                m.lib_path = _unquote(value).map(PathBuf::from);
             }
             "[[bin]]" => {
                 if let Some(b) = current_bin.as_mut() {
@@ -124,11 +124,11 @@ pub fn parse_cargo_toml(path: &Path) -> Option<CargoManifest> {
                     }
                 }
             }
-            "[workspace]" => {
-                if key == "members" {
-                    m.workspace_members = _parse_string_array(value);
-                }
-            }
+            "[workspace]" => match key {
+                "members" => m.workspace_members = _parse_string_array(value),
+                "exclude" => m.workspace_exclude = _parse_string_array(value),
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -168,9 +168,18 @@ pub fn parse_package_json(path: &Path) -> Option<PackageJson> {
     let v: Value = serde_json::from_str(&raw).ok()?;
     let manifest_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
 
-    let name = v.get("name").and_then(|x| x.as_str()).map(|s| s.to_string());
-    let main = v.get("main").and_then(|x| x.as_str()).map(|s| s.to_string());
-    let module = v.get("module").and_then(|x| x.as_str()).map(|s| s.to_string());
+    let name = v
+        .get("name")
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string());
+    let main = v
+        .get("main")
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string());
+    let module = v
+        .get("module")
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string());
     let types = v
         .get("types")
         .or_else(|| v.get("typings"))
@@ -207,7 +216,12 @@ pub fn resolve_package_entry(pkg: &PackageJson) -> Option<PathBuf> {
             }
         }
     }
-    if let Some(rel) = pkg.types.as_deref().or(pkg.module.as_deref()).or(pkg.main.as_deref()) {
+    if let Some(rel) = pkg
+        .types
+        .as_deref()
+        .or(pkg.module.as_deref())
+        .or(pkg.main.as_deref())
+    {
         if let Some(p) = _exists_with_source_pref(&pkg.manifest_dir.join(rel)) {
             return Some(p);
         }
@@ -331,7 +345,11 @@ fn _unquote(v: &str) -> Option<String> {
     let v = v.trim();
     if let Some(s) = v.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
         Some(s.to_string())
-    } else { v.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')).map(|s| s.to_string()) }
+    } else {
+        v.strip_prefix('\'')
+            .and_then(|s| s.strip_suffix('\''))
+            .map(|s| s.to_string())
+    }
 }
 
 fn _parse_string_array(v: &str) -> Vec<String> {

@@ -10,6 +10,7 @@
 
 use crate::surface::manifest::{self, CargoManifest};
 use crate::surface::options::{LangOverride, SurfaceError};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -73,7 +74,8 @@ fn discover_file(file: &Path) -> Result<EntryPoint, SurfaceError> {
     let ext = file.extension().and_then(|s| s.to_str()).unwrap_or("");
     if name == "lib.rs" || name == "main.rs" {
         let src_dir = file.parent().unwrap_or(Path::new(".")).to_path_buf();
-        let crate_name = _crate_name_from_cargo(&src_dir).unwrap_or_else(|| _dir_basename(&src_dir));
+        let crate_name =
+            _crate_name_from_cargo(&src_dir).unwrap_or_else(|| _dir_basename(&src_dir));
         return Ok(EntryPoint::RustCrate {
             root_file: file.to_path_buf(),
             crate_name,
@@ -96,7 +98,10 @@ fn discover_file(file: &Path) -> Result<EntryPoint, SurfaceError> {
     if name == "package.json" {
         return discover_typescript(file.parent().unwrap_or(Path::new(".")));
     }
-    if matches!(ext, "ts" | "tsx" | "mts" | "cts" | "js" | "jsx" | "mjs" | "cjs") {
+    if matches!(
+        ext,
+        "ts" | "tsx" | "mts" | "cts" | "js" | "jsx" | "mjs" | "cjs"
+    ) {
         let dir = file.parent().unwrap_or(Path::new("."));
         let pkg_name = manifest::parse_package_json(&dir.join("package.json"))
             .and_then(|p| p.name)
@@ -181,6 +186,13 @@ fn _has_scala_file(dir: &Path) -> bool {
 }
 
 fn discover_rust(root: &Path) -> Result<EntryPoint, SurfaceError> {
+    discover_rust_inner(root, &mut HashSet::new())
+}
+
+fn discover_rust_inner(
+    root: &Path,
+    seen: &mut HashSet<PathBuf>,
+) -> Result<EntryPoint, SurfaceError> {
     let manifest_path = if root.join("Cargo.toml").is_file() {
         root.join("Cargo.toml")
     } else if root.is_file() && root.file_name().and_then(|s| s.to_str()) == Some("Cargo.toml") {
@@ -188,7 +200,8 @@ fn discover_rust(root: &Path) -> Result<EntryPoint, SurfaceError> {
     } else {
         return Err(SurfaceError::NoEntryPoint {
             path: root.to_path_buf(),
-            hint: "no Cargo.toml here; pass `--lang fallback` or point at lib.rs/main.rs directly".into(),
+            hint: "no Cargo.toml here; pass `--lang fallback` or point at lib.rs/main.rs directly"
+                .into(),
         });
     };
 
@@ -196,13 +209,29 @@ fn discover_rust(root: &Path) -> Result<EntryPoint, SurfaceError> {
         path: manifest_path.clone(),
         source: std::io::Error::other("cannot read Cargo.toml"),
     })?;
+    let manifest_dir = manifest
+        .manifest_dir
+        .canonicalize()
+        .unwrap_or_else(|_| manifest.manifest_dir.clone());
+    if !seen.insert(manifest_dir) {
+        return Err(SurfaceError::NoEntryPoint {
+            path: manifest.manifest_dir.clone(),
+            hint: "Cargo workspace member cycle detected".into(),
+        });
+    }
 
     // Workspace?
     if !manifest.workspace_members.is_empty() {
         let mut members = Vec::new();
-        for m in &manifest.workspace_members {
-            let member_root = manifest.manifest_dir.join(m);
-            if let Ok(ep) = discover_rust(&member_root) {
+        for member_root in manifest
+            .workspace_members
+            .iter()
+            .flat_map(|m| _expand_workspace_member(&manifest.manifest_dir, m))
+            .filter(|p| {
+                !_workspace_member_excluded(&manifest.manifest_dir, p, &manifest.workspace_exclude)
+            })
+        {
+            if let Ok(ep) = discover_rust_inner(&member_root, seen) {
                 members.push(ep);
             }
         }
@@ -312,6 +341,31 @@ fn discover_scala(root: &Path) -> Result<EntryPoint, SurfaceError> {
     })
 }
 
+fn _expand_workspace_member(manifest_dir: &Path, member: &str) -> Vec<PathBuf> {
+    crate::path_glob::expand_pattern(&manifest_dir.join(member))
+        .into_iter()
+        .filter(|p| p.join("Cargo.toml").is_file())
+        .collect()
+}
+
+fn _workspace_member_excluded(
+    manifest_dir: &Path,
+    member_root: &Path,
+    excludes: &[String],
+) -> bool {
+    excludes.iter().any(|exclude| {
+        crate::path_glob::expand_pattern(&manifest_dir.join(exclude))
+            .into_iter()
+            .any(|p| _same_path(&p, member_root))
+    })
+}
+
+fn _same_path(a: &Path, b: &Path) -> bool {
+    let a = a.canonicalize().unwrap_or_else(|_| a.to_path_buf());
+    let b = b.canonicalize().unwrap_or_else(|_| b.to_path_buf());
+    a == b
+}
+
 fn _resolve_rust_root(m: &CargoManifest) -> Option<PathBuf> {
     if let Some(p) = &m.lib_path {
         let abs = m.manifest_dir.join(p);
@@ -345,7 +399,8 @@ fn _find_nearest_manifest(dir: &Path) -> Option<PathBuf> {
         if !p.is_dir() {
             continue;
         }
-        if p.join("Cargo.toml").is_file() || p.join("pyproject.toml").is_file()
+        if p.join("Cargo.toml").is_file()
+            || p.join("pyproject.toml").is_file()
             || p.join("__init__.py").is_file()
         {
             return Some(p);

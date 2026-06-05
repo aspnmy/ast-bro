@@ -128,9 +128,9 @@ struct SurfaceWalker {
     crate_name: String,
     graph: ModuleGraph,
     max_depth: usize,
-    /// Per-walk visited set keyed by `(module_path, item_name)` — breaks
-    /// cycles in `pub use` chains.
-    visited: HashSet<(String, String)>,
+    /// Active recursion stack keyed by `(module_path, item_name)` — breaks
+    /// cycles in `pub use` chains without suppressing later re-exports.
+    reexport_stack: HashSet<(String, String)>,
     /// Final emitted entries, dedup'd by qualified_path.
     entries: Vec<SurfaceEntry>,
     seen_qualified: HashSet<String>,
@@ -142,7 +142,7 @@ impl SurfaceWalker {
             crate_name,
             graph,
             max_depth,
-            visited: HashSet::new(),
+            reexport_stack: HashSet::new(),
             entries: Vec::new(),
             seen_qualified: HashSet::new(),
         }
@@ -314,31 +314,46 @@ impl SurfaceWalker {
                 }
                 let item = resolved.last().unwrap().clone();
                 let target_module = resolved[..resolved.len() - 1].to_vec();
-                let cycle_key = (target_module.join("::"), item.clone());
-                if !self.visited.insert(cycle_key) {
-                    return;
-                }
                 let alias = u.alias.clone().unwrap_or_else(|| item.clone());
-                self._republish(from_segments, &target_module, &item, &alias, chain, false, depth);
+                self._republish(
+                    from_segments,
+                    &target_module,
+                    &item,
+                    &alias,
+                    chain,
+                    false,
+                    depth,
+                );
             }
             UseSegmentKind::Glob => {
                 // `resolved` IS the target module here (no item segment).
                 let target_module = resolved.clone();
                 let key = ModuleGraph::key(&target_module);
                 let target_data = match self.graph.modules.get(&key) {
-                    Some(m) => (m.file.clone(), m.parse.declarations.clone(), m.imports.uses.clone()),
+                    Some(m) => {
+                        let decls: Vec<Declaration> = m
+                            .parse
+                            .declarations
+                            .iter()
+                            .filter(|d| {
+                                _is_public(d) && !matches!(d.kind, DeclarationKind::Namespace)
+                            })
+                            .cloned()
+                            .collect();
+                        let uses: Vec<UseItem> = m
+                            .imports
+                            .uses
+                            .iter()
+                            .filter(|u| _vis_is_public(&u.visibility))
+                            .cloned()
+                            .collect();
+                        (m.file.clone(), decls, uses)
+                    }
                     None => return,
                 };
                 let (target_file, target_decls, target_uses) = target_data;
 
                 for d in &target_decls {
-                    if !_is_public(d) || matches!(d.kind, DeclarationKind::Namespace) {
-                        continue;
-                    }
-                    let cycle_key = (key.clone(), d.name.clone());
-                    if !self.visited.insert(cycle_key) {
-                        continue;
-                    }
                     self._emit_renamed(
                         from_segments,
                         &d.name,
@@ -350,9 +365,6 @@ impl SurfaceWalker {
                 }
                 // Transitive globs: target's own pub uses become reachable too.
                 for tu in target_uses {
-                    if !_vis_is_public(&tu.visibility) {
-                        continue;
-                    }
                     let mut next_chain = chain.clone();
                     next_chain.push(ReExportHop {
                         file: target_file.clone(),
@@ -360,7 +372,13 @@ impl SurfaceWalker {
                         module_path: key.clone(),
                         statement: tu.statement.clone(),
                     });
-                    self._republish_via_use(from_segments, &target_module, &tu, next_chain, depth + 1);
+                    self._republish_via_use(
+                        from_segments,
+                        &target_module,
+                        &tu,
+                        next_chain,
+                        depth + 1,
+                    );
                 }
             }
         }
@@ -380,36 +398,58 @@ impl SurfaceWalker {
         via_glob: bool,
         depth: usize,
     ) {
+        if depth > self.max_depth {
+            return;
+        }
+        let cycle_key = (ModuleGraph::key(target_module), item.to_string());
+        if !self.reexport_stack.insert(cycle_key.clone()) {
+            return;
+        }
         let key = ModuleGraph::key(target_module);
         let target_data = match self.graph.modules.get(&key) {
-            Some(m) => (m.file.clone(), m.parse.declarations.clone(), m.imports.uses.clone()),
-            None => return,
-        };
-        let (target_file, target_decls, target_uses) = target_data;
-
-        // Is `item` an actual declaration in `target_module`?
-        for d in &target_decls {
-            if d.name == item && _is_public(d) {
-                self._emit_renamed(from_segments, alias, d, &target_file, chain, via_glob);
+            Some(m) => {
+                let decl = m
+                    .parse
+                    .declarations
+                    .iter()
+                    .find(|d| d.name == item && _is_public(d))
+                    .cloned();
+                let uses: Vec<UseItem> = m
+                    .imports
+                    .uses
+                    .iter()
+                    .filter(|tu| {
+                        if !_vis_is_public(&tu.visibility) {
+                            return false;
+                        }
+                        let local_name = tu
+                            .alias
+                            .as_deref()
+                            .unwrap_or_else(|| _last_segment(&tu.path));
+                        match tu.kind {
+                            UseSegmentKind::Item => local_name == item,
+                            UseSegmentKind::Glob => true,
+                        }
+                    })
+                    .cloned()
+                    .collect();
+                (m.file.clone(), decl, uses)
+            }
+            None => {
+                self.reexport_stack.remove(&cycle_key);
                 return;
             }
+        };
+        let (target_file, target_decl, target_uses) = target_data;
+
+        // Is `item` an actual declaration in `target_module`?
+        if let Some(d) = target_decl {
+            self._emit_renamed(from_segments, alias, &d, &target_file, chain, via_glob);
+            self.reexport_stack.remove(&cycle_key);
+            return;
         }
         // Is `item` re-exported from inside `target_module`?
         for tu in target_uses {
-            if !_vis_is_public(&tu.visibility) {
-                continue;
-            }
-            let local_name = tu
-                .alias
-                .clone()
-                .unwrap_or_else(|| _last_segment(&tu.path).to_string());
-            let matches_item = match tu.kind {
-                UseSegmentKind::Item => local_name == item,
-                UseSegmentKind::Glob => true,
-            };
-            if !matches_item {
-                continue;
-            }
             let mut next_chain = chain.clone();
             next_chain.push(ReExportHop {
                 file: target_file.clone(),
@@ -454,6 +494,7 @@ impl SurfaceWalker {
                 }
             }
         }
+        self.reexport_stack.remove(&cycle_key);
     }
 
     fn _republish_via_use(
@@ -468,11 +509,10 @@ impl SurfaceWalker {
             return;
         }
         let path_segments: Vec<String> = u.path.split("::").map(|s| s.to_string()).collect();
-        let resolved =
-            match _resolve_path(&self.crate_name, upstream_module, &path_segments) {
-                Some(r) => r,
-                None => return,
-            };
+        let resolved = match _resolve_path(&self.crate_name, upstream_module, &path_segments) {
+            Some(r) => r,
+            None => return,
+        };
         match u.kind {
             UseSegmentKind::Item => {
                 if resolved.is_empty() {
@@ -495,17 +535,22 @@ impl SurfaceWalker {
                 let target_module = resolved.clone();
                 let key = ModuleGraph::key(&target_module);
                 let snap = match self.graph.modules.get(&key) {
-                    Some(m) => (m.file.clone(), m.parse.declarations.clone()),
+                    Some(m) => {
+                        let decls: Vec<Declaration> = m
+                            .parse
+                            .declarations
+                            .iter()
+                            .filter(|d| {
+                                _is_public(d) && !matches!(d.kind, DeclarationKind::Namespace)
+                            })
+                            .cloned()
+                            .collect();
+                        (m.file.clone(), decls)
+                    }
                     None => return,
                 };
                 for d in snap.1 {
-                    if _is_public(&d) && !matches!(d.kind, DeclarationKind::Namespace) {
-                        let cycle_key = (key.clone(), d.name.clone());
-                        if !self.visited.insert(cycle_key) {
-                            continue;
-                        }
-                        self._emit_renamed(from_segments, &d.name, &d, &snap.0, chain.clone(), true);
-                    }
+                    self._emit_renamed(from_segments, &d.name, &d, &snap.0, chain.clone(), true);
                 }
             }
         }
@@ -518,11 +563,7 @@ impl SurfaceWalker {
 /// Resolve a `use`-path written in `from_segments` against the module
 /// graph. Returns the absolute module path (segments) the user is
 /// referring to, or `None` if it leaves the crate.
-fn _resolve_path(
-    crate_name: &str,
-    from: &[String],
-    path: &[String],
-) -> Option<Vec<String>> {
+fn _resolve_path(crate_name: &str, from: &[String], path: &[String]) -> Option<Vec<String>> {
     if path.is_empty() {
         return None;
     }
@@ -604,17 +645,13 @@ fn _is_type_with_methods(d: &Declaration) -> bool {
 fn _is_method_like(d: &Declaration) -> bool {
     matches!(
         d.kind,
-        DeclarationKind::Method
-            | DeclarationKind::Function
-            | DeclarationKind::Constructor
+        DeclarationKind::Method | DeclarationKind::Function | DeclarationKind::Constructor
     )
 }
 
 fn _vis_is_public(v: &str) -> bool {
     let v = v.trim();
-    v == "pub"
-        || v.starts_with("pub ")
-        || v.starts_with("pub(")
+    v == "pub" || v.starts_with("pub ") || v.starts_with("pub(")
 }
 
 fn _last_segment(path: &str) -> &str {
