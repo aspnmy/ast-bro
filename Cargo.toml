@@ -1,6 +1,6 @@
 [package]
 name = "ast-bro"
-version = "2.4.1"
+version = "2.4.2"
 edition = "2021"
 description = "Fast, AST-based code-navigation: shape, public API, deps & call graphs, hybrid semantic search, structural rewrite, and log squeezing. MCP server included."
 authors = ["Aero <aero.windwalker@gmail.com>"]
