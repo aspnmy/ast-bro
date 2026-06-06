@@ -7,7 +7,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const VERSION = "2.4.2";
+const VERSION = "2.4.3";
 const GITHUB_REPO = "aeroxy/ast-bro";
 const BINARY_NAME = "ast-bro";
 
