@@ -11,6 +11,7 @@ keywords = ["ast", "ast-outline", "agentic", "refactoring", "code-search"]
 categories = ["command-line-utilities", "development-tools"]
 include = [
     "src/**/*",
+    "skills/**/*",
     "/Cargo.toml",
     "/README.md",
     "/LICENSE",
