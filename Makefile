@@ -96,4 +96,4 @@ setup-pypi:
 
 ## Build and publish ast-bro to PyPI
 publish-pypi:
-	cd cli-python && venv/bin/python -m build && venv/bin/twine upload dist/*
+	cd cli-python && rm -rf dist && venv/bin/python -m build && venv/bin/twine upload dist/*
