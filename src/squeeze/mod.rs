@@ -377,10 +377,8 @@ impl Compressor {
 
         // Scale the diminishing-returns cutoff to this pass's input size, but
         // never below the absolute floor (so small inputs behave exactly as before).
-        let min_savings = std::cmp::max(
-            BPE_MIN_SAVINGS,
-            (text.len() / BPE_MIN_SAVINGS_RATIO) as i32,
-        );
+        let min_savings =
+            std::cmp::max(BPE_MIN_SAVINGS, (text.len() / BPE_MIN_SAVINGS_RATIO) as i32);
 
         let (part_strs, seps) = strategy.split_text_with_separators(&text);
         let mut parts: Vec<Vec<u32>> = part_strs
@@ -389,7 +387,11 @@ impl Compressor {
                 if p.is_empty() {
                     vec![]
                 } else {
-                    strategy.tokenize(p).into_iter().map(&mut get_or_add).collect()
+                    strategy
+                        .tokenize(p)
+                        .into_iter()
+                        .map(&mut get_or_add)
+                        .collect()
                 }
             })
             .collect();

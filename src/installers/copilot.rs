@@ -87,9 +87,12 @@ impl Installer for Copilot {
                 changes.push(c);
             }
             // Also remove legacy name from pre-rename installs
-            if let Some(c) =
-                common::uninstall_json_object_in(&path, MCP_KEY_PATH, common::OLD_MCP_SERVER_NAME, opts)?
-            {
+            if let Some(c) = common::uninstall_json_object_in(
+                &path,
+                MCP_KEY_PATH,
+                common::OLD_MCP_SERVER_NAME,
+                opts,
+            )? {
                 changes.push(c);
             }
         }
@@ -155,7 +158,11 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let p = dir.path().join(".vscode/mcp.json");
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
-        std::fs::write(&p, r#"{"servers":{"docs":{"type":"http","url":"https://x"}}}"#).unwrap();
+        std::fs::write(
+            &p,
+            r#"{"servers":{"docs":{"type":"http","url":"https://x"}}}"#,
+        )
+        .unwrap();
         let scope = Scope::Local(dir.path().to_path_buf());
         Copilot
             .install_mcp(&scope, &InstallOpts::default())

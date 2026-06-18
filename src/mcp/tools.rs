@@ -4,9 +4,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
-use crate::core::{
-    self, DigestOptions, MapOptions,
-};
+use crate::core::{self, DigestOptions, MapOptions};
 
 /// Static descriptors returned to clients via `tools/list`.
 pub fn list() -> Value {
@@ -335,25 +333,25 @@ pub enum CallResult {
 
 pub fn call(name: &str, args: Value) -> CallResult {
     match name {
-        "map"          => run_map(args),
-        "digest"       => run_digest(args),
-        "show"         => run_show(args),
-        "implements"   => run_implements(args),
-        "surface"      => run_surface(args),
-        "deps"         => run_deps(args),
+        "map" => run_map(args),
+        "digest" => run_digest(args),
+        "show" => run_show(args),
+        "implements" => run_implements(args),
+        "surface" => run_surface(args),
+        "deps" => run_deps(args),
         "reverse_deps" => run_reverse_deps(args),
-        "cycles"       => run_cycles(args),
-        "graph"        => run_graph(args),
-        "search"       => crate::search::mcp::run_search(args),
+        "cycles" => run_cycles(args),
+        "graph" => run_graph(args),
+        "search" => crate::search::mcp::run_search(args),
         "find_related" => crate::search::mcp::run_find_related(args),
-        "index"        => crate::search::mcp::run_index(args),
-        "callers"      => run_callers(args),
-        "callees"      => run_callees(args),
-        "trace"        => run_trace(args),
-        "impact"       => crate::impact::mcp::run_impact(args),
-        "context"      => crate::context::mcp::run_context(args),
-        "run"          => run_run(args),
-        "squeeze"      => run_squeeze(args),
+        "index" => crate::search::mcp::run_index(args),
+        "callers" => run_callers(args),
+        "callees" => run_callees(args),
+        "trace" => run_trace(args),
+        "impact" => crate::impact::mcp::run_impact(args),
+        "context" => crate::context::mcp::run_context(args),
+        "run" => run_run(args),
+        "squeeze" => run_squeeze(args),
         other => CallResult::Error(format!("unknown tool: {}", other)),
     }
 }
@@ -390,9 +388,15 @@ struct CalleesArgs {
     json: bool,
 }
 
-fn default_one() -> usize { 1 }
-fn default_two_hundred() -> usize { 200 }
-fn default_dot() -> PathBuf { PathBuf::from(".") }
+fn default_one() -> usize {
+    1
+}
+fn default_two_hundred() -> usize {
+    200
+}
+fn default_dot() -> PathBuf {
+    PathBuf::from(".")
+}
 
 /// Back-compat shim for renamed boolean args. Pre-rename clients sent
 /// `include_ambiguous` / `external` / `include_external` (true = show);
@@ -439,7 +443,8 @@ fn run_callees(mut args: Value) -> CallResult {
         Ok(r) => r,
         Err(e) => return CallResult::Error(e),
     };
-    let out = crate::calls::mcp::run_callees_text(&a.target, &root, a.depth, !a.hide_external, a.json);
+    let out =
+        crate::calls::mcp::run_callees_text(&a.target, &root, a.depth, !a.hide_external, a.json);
     CallResult::Text(out)
 }
 
@@ -455,7 +460,9 @@ struct TraceArgs {
     json: bool,
 }
 
-fn default_trace_depth() -> usize { 12 }
+fn default_trace_depth() -> usize {
+    12
+}
 
 fn run_trace(args: Value) -> CallResult {
     let a: TraceArgs = match serde_json::from_value(args) {
@@ -473,13 +480,20 @@ fn run_trace(args: Value) -> CallResult {
 #[derive(Deserialize, Default)]
 struct MapArgs {
     paths: Vec<PathBuf>,
-    #[serde(default)] no_private: bool,
-    #[serde(default)] no_fields: bool,
-    #[serde(default)] no_docs: bool,
-    #[serde(default)] no_attrs: bool,
-    #[serde(default)] no_lines: bool,
-    #[serde(default)] glob: Option<String>,
-    #[serde(default)] json: bool,
+    #[serde(default)]
+    no_private: bool,
+    #[serde(default)]
+    no_fields: bool,
+    #[serde(default)]
+    no_docs: bool,
+    #[serde(default)]
+    no_attrs: bool,
+    #[serde(default)]
+    no_lines: bool,
+    #[serde(default)]
+    glob: Option<String>,
+    #[serde(default)]
+    json: bool,
 }
 
 fn run_map(args: Value) -> CallResult {
@@ -515,13 +529,19 @@ fn run_map(args: Value) -> CallResult {
 #[derive(Deserialize, Default)]
 struct DigestArgs {
     paths: Vec<PathBuf>,
-    #[serde(default)] include_private: bool,
-    #[serde(default)] include_fields: bool,
-    #[serde(default = "default_max_members")] max_members: usize,
-    #[serde(default)] json: bool,
+    #[serde(default)]
+    include_private: bool,
+    #[serde(default)]
+    include_fields: bool,
+    #[serde(default = "default_max_members")]
+    max_members: usize,
+    #[serde(default)]
+    json: bool,
 }
 
-fn default_max_members() -> usize { 50 }
+fn default_max_members() -> usize {
+    50
+}
 
 fn run_digest(args: Value) -> CallResult {
     let a: DigestArgs = match serde_json::from_value(args) {
@@ -563,7 +583,8 @@ fn run_digest(args: Value) -> CallResult {
 struct ShowArgs {
     path: PathBuf,
     symbols: Vec<String>,
-    #[serde(default)] json: bool,
+    #[serde(default)]
+    json: bool,
 }
 
 fn run_show(args: Value) -> CallResult {
@@ -597,7 +618,11 @@ fn run_show(args: Value) -> CallResult {
         for m in &all {
             out.push_str(&format!(
                 "# {}:{}-{} {} ({})\n",
-                res.path.display(), m.start_line, m.end_line, m.qualified_name, m.kind
+                res.path.display(),
+                m.start_line,
+                m.end_line,
+                m.qualified_name,
+                m.kind
             ));
             if !m.ancestor_signatures.is_empty() {
                 out.push_str(&format!("# in: {}\n", m.ancestor_signatures.join(" → ")));
@@ -613,20 +638,28 @@ fn run_show(args: Value) -> CallResult {
 struct ImplementsArgs {
     target: String,
     paths: Vec<PathBuf>,
-    #[serde(default)] direct: bool,
-    #[serde(default)] json: bool,
+    #[serde(default)]
+    direct: bool,
+    #[serde(default)]
+    json: bool,
 }
 
 #[derive(Deserialize, Default)]
 struct SurfaceArgs {
     #[serde(default = "default_surface_path")]
     path: PathBuf,
-    #[serde(default)] tree: bool,
-    #[serde(default)] include_chain: bool,
-    #[serde(default = "default_surface_max_depth")] max_depth: usize,
-    #[serde(default)] include_private: bool,
-    #[serde(default)] lang: Option<String>,
-    #[serde(default)] json: bool,
+    #[serde(default)]
+    tree: bool,
+    #[serde(default)]
+    include_chain: bool,
+    #[serde(default = "default_surface_max_depth")]
+    max_depth: usize,
+    #[serde(default)]
+    include_private: bool,
+    #[serde(default)]
+    lang: Option<String>,
+    #[serde(default)]
+    json: bool,
 }
 
 fn default_surface_path() -> PathBuf {
@@ -663,9 +696,11 @@ fn run_surface(args: Value) -> CallResult {
         lang_override,
     };
     match crate::surface::resolve_surface(&a.path, &opts) {
-        Ok(entries) => {
-            CallResult::Text(crate::surface::render::render(&entries, output, a.include_chain))
-        }
+        Ok(entries) => CallResult::Text(crate::surface::render::render(
+            &entries,
+            output,
+            a.include_chain,
+        )),
         Err(e) => CallResult::Error(format!("{e}")),
     }
 }
@@ -683,11 +718,14 @@ fn run_implements(args: Value) -> CallResult {
     let matches = core::find_implementations(&results, &a.target, transitive);
 
     if a.json {
-        CallResult::Text(core::render_json_implements(&a.target, &matches, transitive, true))
+        CallResult::Text(core::render_json_implements(
+            &a.target, &matches, transitive, true,
+        ))
     } else {
         let mut out = format!(
             "# {} match(es) for '{}' (incl. transitive):\n",
-            matches.len(), a.target
+            matches.len(),
+            a.target
         );
         for m in &matches {
             let via = if m.via.is_empty() {
@@ -695,7 +733,10 @@ fn run_implements(args: Value) -> CallResult {
             } else {
                 format!(" [via {}]", m.via.last().unwrap())
             };
-            out.push_str(&format!("{}:{}  {} {}{}\n", m.path, m.start_line, m.kind, m.name, via));
+            out.push_str(&format!(
+                "{}:{}  {} {}{}\n",
+                m.path, m.start_line, m.kind, m.name, via
+            ));
         }
         CallResult::Text(out)
     }
@@ -706,41 +747,65 @@ fn run_implements(args: Value) -> CallResult {
 #[derive(Deserialize, Default)]
 struct DepsArgs {
     file: PathBuf,
-    #[serde(default = "default_depth")] depth: usize,
-    #[serde(default)] hide_external: bool,
-    #[serde(default)] rebuild: bool,
-    #[serde(default)] json: bool,
+    #[serde(default = "default_depth")]
+    depth: usize,
+    #[serde(default)]
+    hide_external: bool,
+    #[serde(default)]
+    rebuild: bool,
+    #[serde(default)]
+    json: bool,
 }
 
 #[derive(Deserialize, Default)]
 struct ReverseDepsArgs {
     file: PathBuf,
-    #[serde(default = "default_depth")] depth: usize,
-    #[serde(default = "default_limit")] limit: usize,
-    #[serde(default)] rebuild: bool,
-    #[serde(default)] json: bool,
+    #[serde(default = "default_depth")]
+    depth: usize,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(default)]
+    rebuild: bool,
+    #[serde(default)]
+    json: bool,
 }
 
 #[derive(Deserialize, Default)]
 struct CyclesArgs {
-    #[serde(default = "default_path")] path: PathBuf,
-    #[serde(default = "default_min_size")] min_size: usize,
-    #[serde(default)] rebuild: bool,
-    #[serde(default)] json: bool,
+    #[serde(default = "default_path")]
+    path: PathBuf,
+    #[serde(default = "default_min_size")]
+    min_size: usize,
+    #[serde(default)]
+    rebuild: bool,
+    #[serde(default)]
+    json: bool,
 }
 
 #[derive(Deserialize, Default)]
 struct GraphArgs {
-    #[serde(default = "default_path")] path: PathBuf,
-    #[serde(default)] json: bool,
-    #[serde(default)] hide_external: bool,
-    #[serde(default)] rebuild: bool,
+    #[serde(default = "default_path")]
+    path: PathBuf,
+    #[serde(default)]
+    json: bool,
+    #[serde(default)]
+    hide_external: bool,
+    #[serde(default)]
+    rebuild: bool,
 }
 
-fn default_depth() -> usize { 3 }
-fn default_limit() -> usize { 200 }
-fn default_min_size() -> usize { 2 }
-fn default_path() -> PathBuf { PathBuf::from(".") }
+fn default_depth() -> usize {
+    3
+}
+fn default_limit() -> usize {
+    200
+}
+fn default_min_size() -> usize {
+    2
+}
+fn default_path() -> PathBuf {
+    PathBuf::from(".")
+}
 
 fn run_deps(mut args: Value) -> CallResult {
     translate_renamed_bool(&mut args, "external", "hide_external");
@@ -767,9 +832,20 @@ fn run_deps(mut args: Value) -> CallResult {
     };
     let hits = crate::deps::traverse::forward(&graph, &canon, a.depth.max(1));
     if a.json {
-        CallResult::Text(crate::deps::render::render_deps_json(&graph, &canon, &hits, !a.hide_external, true))
+        CallResult::Text(crate::deps::render::render_deps_json(
+            &graph,
+            &canon,
+            &hits,
+            !a.hide_external,
+            true,
+        ))
     } else {
-        CallResult::Text(crate::deps::render::render_deps_text(&graph, &canon, &hits, !a.hide_external))
+        CallResult::Text(crate::deps::render::render_deps_text(
+            &graph,
+            &canon,
+            &hits,
+            !a.hide_external,
+        ))
     }
 }
 
@@ -797,9 +873,13 @@ fn run_reverse_deps(args: Value) -> CallResult {
     };
     let hits = crate::deps::traverse::reverse(&graph, &canon, a.depth.max(1), a.limit, |_| true);
     if a.json {
-        CallResult::Text(crate::deps::render::render_reverse_deps_json(&graph, &canon, &hits, true))
+        CallResult::Text(crate::deps::render::render_reverse_deps_json(
+            &graph, &canon, &hits, true,
+        ))
     } else {
-        CallResult::Text(crate::deps::render::render_reverse_deps_text(&graph, &canon, &hits))
+        CallResult::Text(crate::deps::render::render_reverse_deps_text(
+            &graph, &canon, &hits,
+        ))
     }
 }
 
@@ -823,7 +903,9 @@ fn run_cycles(args: Value) -> CallResult {
     };
     let cycles = crate::deps::scc::detect(&graph, a.min_size);
     if a.json {
-        CallResult::Text(crate::deps::render::render_cycles_json(&graph, &cycles, true))
+        CallResult::Text(crate::deps::render::render_cycles_json(
+            &graph, &cycles, true,
+        ))
     } else {
         CallResult::Text(crate::deps::render::render_cycles_text(&graph, &cycles))
     }
@@ -915,7 +997,7 @@ fn run_run(args: Value) -> CallResult {
         a.paths
     };
     let files = crate::walk_paths(&search_paths, a.glob.as_deref());
-    
+
     #[derive(serde::Serialize)]
     struct RewriteRecord {
         file: String,
@@ -940,7 +1022,10 @@ fn run_run(args: Value) -> CallResult {
     // Cache compiled patterns per language when lang is auto-detected,
     // so files of the same language reuse the compiled pattern.
     // Stores Result<Pattern, String> — Err when the pattern is invalid for that language.
-    let mut pattern_cache: std::collections::HashMap<ast_grep_language::SupportLang, Result<ast_grep_core::Pattern, String>> = std::collections::HashMap::new();
+    let mut pattern_cache: std::collections::HashMap<
+        ast_grep_language::SupportLang,
+        Result<ast_grep_core::Pattern, String>,
+    > = std::collections::HashMap::new();
 
     for path in &files {
         // Detect language first to avoid reading non-source files.
@@ -999,7 +1084,7 @@ fn run_run(args: Value) -> CallResult {
                 }
                 error_count += 1;
                 continue;
-            },
+            }
         };
 
         // Search-only mode (no rewrite template)
@@ -1160,15 +1245,16 @@ fn run_run(args: Value) -> CallResult {
                 cap_limit: MCP_REWRITE_MAX_FILES,
                 files: &rewrite_records,
             };
-            return CallResult::Text(
-                serde_json::to_string_pretty(&doc).unwrap_or_default(),
-            );
+            return CallResult::Text(serde_json::to_string_pretty(&doc).unwrap_or_default());
         }
         if rewrite_count == 0 && !rewrite_capped && error_count == 0 {
             output.push_str("No matches found for rewrite.");
         }
         if rewrite_capped {
-            output.push_str(&format!("\n# warning: reached safety cap of {} files; remaining files were not processed.", MCP_REWRITE_MAX_FILES));
+            output.push_str(&format!(
+                "\n# warning: reached safety cap of {} files; remaining files were not processed.",
+                MCP_REWRITE_MAX_FILES
+            ));
         }
         if error_count > 0 {
             output.push_str(&format!("\n({} files had errors)", error_count));
@@ -1202,10 +1288,17 @@ fn run_run(args: Value) -> CallResult {
         } else {
             let matched_files: std::collections::HashSet<&str> =
                 all_matches.iter().map(|m| m.file.as_str()).collect();
-            output.push_str(&format!("Found {} matches in {} files:\n", all_matches.len(), matched_files.len()));
+            output.push_str(&format!(
+                "Found {} matches in {} files:\n",
+                all_matches.len(),
+                matched_files.len()
+            ));
             for m in all_matches {
                 let first_line = m.matched_text.lines().next().unwrap_or("");
-                output.push_str(&format!("{}:{}:{}-{}:{}: {}\n", m.file, m.start_line, m.start_col, m.end_line, m.end_col, first_line));
+                output.push_str(&format!(
+                    "{}:{}:{}-{}:{}: {}\n",
+                    m.file, m.start_line, m.start_col, m.end_line, m.end_col, first_line
+                ));
             }
         }
         if !search_errors.is_empty() {
@@ -1230,10 +1323,14 @@ fn run_run(args: Value) -> CallResult {
 #[derive(Deserialize)]
 struct SqueezeArgs {
     path: PathBuf,
-    #[serde(default)] start: Option<usize>,
-    #[serde(default)] end: Option<usize>,
-    #[serde(default)] raw: bool,
-    #[serde(default)] json: bool,
+    #[serde(default)]
+    start: Option<usize>,
+    #[serde(default)]
+    end: Option<usize>,
+    #[serde(default)]
+    raw: bool,
+    #[serde(default)]
+    json: bool,
 }
 
 fn run_squeeze(args: Value) -> CallResult {

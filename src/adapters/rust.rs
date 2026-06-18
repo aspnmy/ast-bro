@@ -627,10 +627,12 @@ fn _expand_use_tree<'a, D: Doc>(
             let module = full.join("::");
             let local = alias
                 .map(|a| String::from_utf8_lossy(&src[a.range()]).to_string())
-                .unwrap_or_else(|| {
-                    full.last().cloned().unwrap_or_default()
-                });
-            out.push(ImportBinding { local, module, line });
+                .unwrap_or_else(|| full.last().cloned().unwrap_or_default());
+            out.push(ImportBinding {
+                local,
+                module,
+                line,
+            });
         }
         "use_list" | "scoped_use_list" => {
             let mut new_prefix = prefix.clone();

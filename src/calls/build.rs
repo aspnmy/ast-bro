@@ -134,9 +134,9 @@ pub fn extract_file(root: &Path, file: &Path) -> Option<FilePass> {
         &mut types,
     );
 
-     Some(FilePass {
-         file: file.to_path_buf(),
-         defined,
+    Some(FilePass {
+        file: file.to_path_buf(),
+        defined,
         callable_locations,
         imports: parse.imports,
         raw_edges,
@@ -180,10 +180,7 @@ fn walk(
             types.push((
                 qn,
                 TypeMeta {
-                    kind: d
-                        .native_kind
-                        .clone()
-                        .unwrap_or_else(|| d.kind.to_string()),
+                    kind: d.native_kind.clone().unwrap_or_else(|| d.kind.to_string()),
                     file: PathBuf::from(rel_file),
                     line: d.start_line as u32,
                     bases: d.bases.clone(),

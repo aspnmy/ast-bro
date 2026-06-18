@@ -17,8 +17,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
-use std::sync::{Mutex, OnceLock};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 pub const CACHE_SCHEMA: &str = JSON_SCHEMA_GRAPH_INDEX;
 /// Legacy schema from pre-rename installs — still readable.
@@ -178,11 +178,7 @@ pub fn load_or_build_with_records(
 
 /// Persist a graph + file fingerprints atomically. Writes via `.tmp` +
 /// rename, holds an advisory exclusive lock during the write.
-pub fn save(
-    root: &Path,
-    graph: &UnifiedGraph,
-    files: &[FileRecord],
-) -> std::io::Result<()> {
+pub fn save(root: &Path, graph: &UnifiedGraph, files: &[FileRecord]) -> std::io::Result<()> {
     let dir = cache_dir(root);
     fs::create_dir_all(&dir)?;
     write_gitignore(&dir)?;
@@ -199,8 +195,7 @@ pub fn save(
         graph: graph.clone(),
         files: files.to_vec(),
     };
-    let bytes = encode_to_vec(&cf, bincode::config::standard())
-        .map_err(std::io::Error::other)?;
+    let bytes = encode_to_vec(&cf, bincode::config::standard()).map_err(std::io::Error::other)?;
 
     let final_path = cache_path(root);
     let tmp = final_path.with_extension("bin.tmp");
@@ -306,7 +301,10 @@ mod tests {
         let bytes = fs::read(cache_path(root)).expect("read cold cache");
         let (cf, _): (CacheFile, _) =
             decode_from_slice(&bytes, bincode::config::standard()).expect("decode cold");
-        assert!(cf.graph.calls.is_none(), "on-disk cold cache should be calls: None");
+        assert!(
+            cf.graph.calls.is_none(),
+            "on-disk cold cache should be calls: None"
+        );
 
         // 2. Promote and re-read the bytes from disk.
         shared::promote_calls(root, |g| {

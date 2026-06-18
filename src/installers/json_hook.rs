@@ -66,9 +66,13 @@ fn ensure_array<'a>(root: &'a mut Value, path: &[&str]) -> &'a mut Vec<Value> {
     for (i, key) in path.iter().enumerate() {
         let is_last = i + 1 == path.len();
         let obj = current.as_object_mut().unwrap();
-        let entry = obj
-            .entry((*key).to_string())
-            .or_insert_with(|| if is_last { json!([]) } else { json!({}) });
+        let entry = obj.entry((*key).to_string()).or_insert_with(|| {
+            if is_last {
+                json!([])
+            } else {
+                json!({})
+            }
+        });
         if is_last {
             if !entry.is_array() {
                 *entry = json!([]);
@@ -203,7 +207,9 @@ mod tests {
     #[test]
     fn matches_any_marker_accepts_legacy_and_current() {
         assert!(matches_any_marker("ast-bro hook --protocol claude-code"));
-        assert!(matches_any_marker("ast-outline hook --protocol claude-code"));
+        assert!(matches_any_marker(
+            "ast-outline hook --protocol claude-code"
+        ));
         assert!(!matches_any_marker("echo hi"));
     }
 

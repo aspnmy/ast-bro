@@ -139,7 +139,10 @@ pub fn run_with_table(
             // (e.g. `builder.hidden()` would resolve to any project method
             // happening to be called `hidden`). Defer them to pass C.
             let has_receiver = raw.receiver.is_some()
-                && !matches!(raw.receiver.as_deref(), Some("self") | Some("Self") | Some("crate") | Some("super"));
+                && !matches!(
+                    raw.receiver.as_deref(),
+                    Some("self") | Some("Self") | Some("crate") | Some("super")
+                );
             match symbol_table.get(&raw.bare_name) {
                 Some(cands) if cands.len() == 1 && !has_receiver => {
                     let edge = raw_to_edge(
@@ -193,16 +196,34 @@ pub fn run_with_table(
             .collect();
 
         let (target, confidence, candidates) = if filtered.len() == 1 {
-            (CallTarget::Resolved(filtered[0].clone()), Confidence::Inferred, Vec::new())
+            (
+                CallTarget::Resolved(filtered[0].clone()),
+                Confidence::Inferred,
+                Vec::new(),
+            )
         } else if filtered.is_empty() {
             // No dep-relationship — fall back to ambiguous.
-            (CallTarget::Bare(raw.bare_name.clone()), Confidence::Ambiguous, cands)
+            (
+                CallTarget::Bare(raw.bare_name.clone()),
+                Confidence::Ambiguous,
+                cands,
+            )
         } else {
             // Multiple survivors — keep as ambiguous with surviving set.
-            (CallTarget::Bare(raw.bare_name.clone()), Confidence::Ambiguous, filtered)
+            (
+                CallTarget::Bare(raw.bare_name.clone()),
+                Confidence::Ambiguous,
+                filtered,
+            )
         };
 
-        let edge = raw_to_edge(raw, target, confidence, rel_path(root, &src_file), candidates);
+        let edge = raw_to_edge(
+            raw,
+            target,
+            confidence,
+            rel_path(root, &src_file),
+            candidates,
+        );
         forward.entry(edge.source.clone()).or_default().push(edge);
     }
 
@@ -259,6 +280,7 @@ fn forward_closure_files(deps: &DepGraph, from: &Path) -> HashSet<PathBuf> {
 }
 
 fn rel_path(root: &Path, file: &Path) -> PathBuf {
-    file.strip_prefix(root).map(|p| p.to_path_buf()).unwrap_or_else(|_| file.to_path_buf())
+    file.strip_prefix(root)
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|_| file.to_path_buf())
 }
-

@@ -37,9 +37,7 @@ fn ensure_object<'a>(root: &'a mut Value, path: &[&str]) -> &'a mut Map<String, 
     let mut current = root;
     for key in path {
         let obj = current.as_object_mut().unwrap();
-        let entry = obj
-            .entry((*key).to_string())
-            .or_insert_with(|| json!({}));
+        let entry = obj.entry((*key).to_string()).or_insert_with(|| json!({}));
         if !entry.is_object() {
             *entry = json!({});
         }
@@ -56,7 +54,10 @@ fn navigate_object<'a>(root: &'a Value, path: &[&str]) -> Option<&'a Map<String,
     current.as_object()
 }
 
-fn navigate_object_mut<'a>(root: &'a mut Value, path: &[&str]) -> Option<&'a mut Map<String, Value>> {
+fn navigate_object_mut<'a>(
+    root: &'a mut Value,
+    path: &[&str],
+) -> Option<&'a mut Map<String, Value>> {
     let mut current = root;
     for key in path {
         current = current.as_object_mut()?.get_mut(*key)?;
@@ -158,9 +159,7 @@ mod tests {
     fn key_insertion_order_preserved() {
         let mut root = Value::Object(Map::new());
         for name in ["alpha", "beta", "gamma"] {
-            root.as_object_mut()
-                .unwrap()
-                .insert(name.into(), json!({}));
+            root.as_object_mut().unwrap().insert(name.into(), json!({}));
         }
         upsert(&mut root, &["mcpServers"], "ast-bro", entry());
         let keys: Vec<&String> = root.as_object().unwrap().keys().collect();

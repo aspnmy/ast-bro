@@ -1,17 +1,17 @@
-pub mod paths;
+pub mod aider;
+pub mod claude_code;
+pub mod codex;
+pub mod common;
+pub mod copilot;
+pub mod cursor;
+pub mod gemini;
 pub mod io;
-pub mod marker_block;
 pub mod json_hook;
 pub mod json_object;
-pub mod toml_object;
-pub mod common;
-pub mod claude_code;
-pub mod gemini;
+pub mod marker_block;
+pub mod paths;
 pub mod tabnine;
-pub mod cursor;
-pub mod aider;
-pub mod codex;
-pub mod copilot;
+pub mod toml_object;
 
 use std::path::PathBuf;
 
@@ -68,7 +68,11 @@ pub trait Installer: Sync + Send {
     fn detect(&self, scope: &Scope) -> Detection;
     fn install_prompt(&self, scope: &Scope, opts: &InstallOpts) -> Result<Change, String>;
     fn install_hook(&self, scope: &Scope, opts: &InstallOpts) -> Result<Change, String>;
-    fn install_subagents(&self, _scope: &Scope, _opts: &InstallOpts) -> Result<Vec<Change>, String> {
+    fn install_subagents(
+        &self,
+        _scope: &Scope,
+        _opts: &InstallOpts,
+    ) -> Result<Vec<Change>, String> {
         Ok(Vec::new())
     }
     fn install_mcp(&self, _scope: &Scope, _opts: &InstallOpts) -> Result<Change, String> {

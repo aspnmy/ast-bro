@@ -105,9 +105,12 @@ impl Installer for Tabnine {
         if let Some(c) = common::uninstall_prompt_in(&self.old_prompt_path(scope)?, opts)? {
             changes.push(c);
         }
-        if let Some(c) =
-            common::uninstall_json_hook_in(&self.settings_path(scope)?, HOOK_PATH, matches_entry, opts)?
-        {
+        if let Some(c) = common::uninstall_json_hook_in(
+            &self.settings_path(scope)?,
+            HOOK_PATH,
+            matches_entry,
+            opts,
+        )? {
             changes.push(c);
         }
         Ok(changes)

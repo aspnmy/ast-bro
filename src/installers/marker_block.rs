@@ -29,7 +29,10 @@ pub fn apply(
         let current_body = &file_contents[start.body_start..end.body_end];
         if !force && current_body.trim() != expected_block_body.trim() {
             let diff = simple_diff(current_body, new_block_body);
-            return (file_contents.to_string(), ApplyOutcome::UserEditsBlocked(diff));
+            return (
+                file_contents.to_string(),
+                ApplyOutcome::UserEditsBlocked(diff),
+            );
         }
         let mut out = String::with_capacity(file_contents.len());
         out.push_str(&file_contents[..start.line_start]);

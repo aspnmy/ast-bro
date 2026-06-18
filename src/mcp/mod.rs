@@ -13,9 +13,7 @@ pub(crate) mod tools;
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
 
-use protocol::{
-    Request, Response, INTERNAL_ERROR, INVALID_PARAMS, METHOD_NOT_FOUND, PARSE_ERROR,
-};
+use protocol::{Request, Response, INTERNAL_ERROR, INVALID_PARAMS, METHOD_NOT_FOUND, PARSE_ERROR};
 
 /// MCP protocol revision we advertise. Matches the spec at the time of
 /// implementation; bump when adopting newer revisions.
@@ -49,11 +47,7 @@ pub fn run() -> i32 {
                 }
             }
             Err(e) => {
-                let resp = Response::err(
-                    Value::Null,
-                    PARSE_ERROR,
-                    format!("parse error: {}", e),
-                );
+                let resp = Response::err(Value::Null, PARSE_ERROR, format!("parse error: {}", e));
                 if let Err(e) = write_message(&mut out, &resp) {
                     eprintln!("ast-bro mcp: stdout write error: {}", e);
                     return 1;
@@ -129,11 +123,13 @@ fn tools_call(params: Value) -> Result<Value, (i32, String)> {
         .and_then(|v| v.as_str())
         .ok_or((INVALID_PARAMS, "missing `name`".into()))?
         .to_string();
-    let args = params.get("arguments").cloned().unwrap_or(Value::Object(Default::default()));
+    let args = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or(Value::Object(Default::default()));
 
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        tools::call(&name, args)
-    }));
+    let result =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tools::call(&name, args)));
 
     match result {
         Ok(tools::CallResult::Text(text)) => Ok(json!({
@@ -147,4 +143,3 @@ fn tools_call(params: Value) -> Result<Value, (i32, String)> {
         Err(_) => Err((INTERNAL_ERROR, format!("tool `{}` panicked", name))),
     }
 }
-

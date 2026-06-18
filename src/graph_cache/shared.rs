@@ -51,7 +51,10 @@ fn registry() -> &'static Registry {
 }
 
 fn store(key: PathBuf, graph: Arc<UnifiedGraph>, records: Arc<Vec<FileRecord>>) {
-    registry().write().unwrap().insert(key, Entry { graph, records });
+    registry()
+        .write()
+        .unwrap()
+        .insert(key, Entry { graph, records });
 }
 
 /// Get the unified graph for `root`, building (and persisting) it if no

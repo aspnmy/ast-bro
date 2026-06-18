@@ -347,7 +347,10 @@ mod tests {
             "repetitive input should squeeze, got header in:\n{}",
             txt.lines().next().unwrap_or("")
         );
-        assert!(txt.contains("# legend:"), "squeezed output must have a legend");
+        assert!(
+            txt.contains("# legend:"),
+            "squeezed output must have a legend"
+        );
 
         // JSON view confirms the decision + that the emitted body shrank.
         let json = render_json(&r, false);

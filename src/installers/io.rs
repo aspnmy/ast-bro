@@ -24,21 +24,15 @@ pub fn atomic_write(path: &Path, contents: &str) -> Result<(), String> {
     }
     let tmp = path.with_extension(tmp_extension(path));
     {
-        let mut f = fs::File::create(&tmp)
-            .map_err(|e| format!("create temp {}: {}", tmp.display(), e))?;
+        let mut f =
+            fs::File::create(&tmp).map_err(|e| format!("create temp {}: {}", tmp.display(), e))?;
         f.write_all(contents.as_bytes())
             .map_err(|e| format!("write temp {}: {}", tmp.display(), e))?;
         f.sync_all()
             .map_err(|e| format!("fsync temp {}: {}", tmp.display(), e))?;
     }
-    fs::rename(&tmp, path).map_err(|e| {
-        format!(
-            "rename temp {} -> {}: {}",
-            tmp.display(),
-            path.display(),
-            e
-        )
-    })?;
+    fs::rename(&tmp, path)
+        .map_err(|e| format!("rename temp {} -> {}: {}", tmp.display(), path.display(), e))?;
     Ok(())
 }
 

@@ -125,7 +125,12 @@ impl Installer for ClaudeCode {
                 "Explore" => EXPLORE_FRONTMATTER,
                 _ => "",
             };
-            changes.push(common::install_subagent_in(&path, frontmatter, agent_prompt(), opts)?);
+            changes.push(common::install_subagent_in(
+                &path,
+                frontmatter,
+                agent_prompt(),
+                opts,
+            )?);
         }
         Ok(changes)
     }
@@ -150,9 +155,12 @@ impl Installer for ClaudeCode {
         if let Some(c) = common::uninstall_prompt_in(&self.prompt_path(scope)?, opts)? {
             changes.push(c);
         }
-        if let Some(c) =
-            common::uninstall_json_hook_in(&self.settings_path(scope)?, HOOK_PATH, matches_entry, opts)?
-        {
+        if let Some(c) = common::uninstall_json_hook_in(
+            &self.settings_path(scope)?,
+            HOOK_PATH,
+            matches_entry,
+            opts,
+        )? {
             changes.push(c);
         }
         for name in SHADOWED_SUBAGENTS {
@@ -314,14 +322,20 @@ mod tests {
         let s1 = ClaudeCode.status(&scope);
         assert!(s1.prompt_installed);
         assert!(s1.hook_installed);
-        assert_eq!(s1.prompt_version.as_deref(), Some(env!("CARGO_PKG_VERSION")));
+        assert_eq!(
+            s1.prompt_version.as_deref(),
+            Some(env!("CARGO_PKG_VERSION"))
+        );
     }
 
     #[test]
     fn dry_run_does_not_write() {
         let dir = TempDir::new().unwrap();
         let scope = local_scope(&dir);
-        let opts = InstallOpts { dry_run: true, ..Default::default() };
+        let opts = InstallOpts {
+            dry_run: true,
+            ..Default::default()
+        };
         ClaudeCode.install_prompt(&scope, &opts).unwrap();
         assert!(!dir.path().join("CLAUDE.md").exists());
     }
@@ -337,7 +351,10 @@ mod tests {
         assert!(matches!(changes[0], Change::Created(_)));
         let path = dir.path().join(".claude/agents/Explore.md");
         let contents = std::fs::read_to_string(&path).unwrap();
-        assert!(contents.starts_with("---\nname: Explore\n"), "frontmatter must be at offset 0");
+        assert!(
+            contents.starts_with("---\nname: Explore\n"),
+            "frontmatter must be at offset 0"
+        );
         assert!(contents.contains("<!-- ast-bro:begin"));
         assert!(contents.contains("ast-bro"));
     }
@@ -407,7 +424,9 @@ mod tests {
         let opts = InstallOpts::default();
         ClaudeCode.install_subagents(&scope, &opts).unwrap();
         let removed = ClaudeCode.uninstall(&scope, &opts).unwrap();
-        assert!(removed.iter().any(|c| matches!(c, Change::Removed(p) if p.ends_with("Explore.md"))));
+        assert!(removed
+            .iter()
+            .any(|c| matches!(c, Change::Removed(p) if p.ends_with("Explore.md"))));
         let contents = std::fs::read_to_string(&agent_path).unwrap();
         assert!(!contents.contains("ast-bro:begin"));
         assert!(contents.contains("Keep me."));
@@ -419,14 +438,19 @@ mod tests {
         let scope = local_scope(&dir);
         let opts = InstallOpts::default();
         let removed = ClaudeCode.uninstall(&scope, &opts).unwrap();
-        assert!(removed.iter().all(|c| !matches!(c, Change::Removed(p) if p.ends_with("Explore.md"))));
+        assert!(removed
+            .iter()
+            .all(|c| !matches!(c, Change::Removed(p) if p.ends_with("Explore.md"))));
     }
 
     #[test]
     fn install_subagents_dry_run_does_not_write() {
         let dir = TempDir::new().unwrap();
         let scope = local_scope(&dir);
-        let opts = InstallOpts { dry_run: true, ..Default::default() };
+        let opts = InstallOpts {
+            dry_run: true,
+            ..Default::default()
+        };
         ClaudeCode.install_subagents(&scope, &opts).unwrap();
         assert!(!dir.path().join(".claude/agents/Explore.md").exists());
     }
@@ -492,8 +516,7 @@ mod tests {
         ClaudeCode
             .install_mcp(&scope, &InstallOpts::default())
             .unwrap();
-        let v: Value =
-            serde_json::from_str(&std::fs::read_to_string(&mcp_path).unwrap()).unwrap();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&mcp_path).unwrap()).unwrap();
         for i in 0..50 {
             assert_eq!(v[format!("key_{:02}", i)], json!(i), "key_{:02} lost", i);
         }
@@ -504,7 +527,10 @@ mod tests {
     fn install_mcp_dry_run_does_not_write() {
         let dir = TempDir::new().unwrap();
         let scope = local_scope(&dir);
-        let opts = InstallOpts { dry_run: true, ..Default::default() };
+        let opts = InstallOpts {
+            dry_run: true,
+            ..Default::default()
+        };
         ClaudeCode.install_mcp(&scope, &opts).unwrap();
         assert!(!dir.path().join(".mcp.json").exists());
     }
@@ -518,8 +544,7 @@ mod tests {
             .unwrap();
         assert!(matches!(change, Change::Created(_)));
         let contents =
-            std::fs::read_to_string(dir.path().join(".claude/skills/ast-bro/SKILL.md"))
-                .unwrap();
+            std::fs::read_to_string(dir.path().join(".claude/skills/ast-bro/SKILL.md")).unwrap();
         assert!(contents.starts_with("---\n"));
         assert!(contents.contains("name: ast-bro"));
         assert!(contents.contains("user-invocable: true"));
@@ -556,7 +581,10 @@ mod tests {
     fn install_skills_dry_run_does_not_write() {
         let dir = TempDir::new().unwrap();
         let scope = local_scope(&dir);
-        let opts = InstallOpts { dry_run: true, ..Default::default() };
+        let opts = InstallOpts {
+            dry_run: true,
+            ..Default::default()
+        };
         ClaudeCode.install_skills(&scope, &opts).unwrap();
         assert!(!dir.path().join(".claude/skills/ast-bro/SKILL.md").exists());
     }
@@ -574,8 +602,7 @@ mod tests {
         let opts = InstallOpts::default();
         ClaudeCode.install_mcp(&scope, &opts).unwrap();
         ClaudeCode.uninstall(&scope, &opts).unwrap();
-        let v: Value =
-            serde_json::from_str(&std::fs::read_to_string(&mcp_path).unwrap()).unwrap();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&mcp_path).unwrap()).unwrap();
         assert!(v["mcpServers"].get("ast-bro").is_none());
         assert_eq!(v["mcpServers"]["other"]["command"], "x");
     }
@@ -591,7 +618,7 @@ mod tests {
         ClaudeCode.uninstall(&scope, &opts).unwrap();
         assert!(!skill_dir.join("SKILL.md").exists());
         assert!(!skill_dir.exists()); // empty parent removed
-        // .claude/skills/ stays intact (might be host to other skills).
+                                      // .claude/skills/ stays intact (might be host to other skills).
         assert!(dir.path().join(".claude/skills").exists());
     }
 
