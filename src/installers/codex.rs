@@ -126,8 +126,7 @@ impl Installer for Codex {
         if let Ok(cp) = self.config_path(scope) {
             if let Ok(Some(contents)) = super::io::read_optional(&cp) {
                 if let Ok(doc) = contents.parse::<DocumentMut>() {
-                    s.mcp_installed =
-                        toml_object::is_installed(&doc, MCP_PARENT, MCP_SERVER_NAME);
+                    s.mcp_installed = toml_object::is_installed(&doc, MCP_PARENT, MCP_SERVER_NAME);
                 }
             }
         }
@@ -162,11 +161,8 @@ mod tests {
     fn install_mcp_writes_codex_config_toml() {
         let dir = TempDir::new().unwrap();
         let scope = Scope::Local(dir.path().to_path_buf());
-        Codex
-            .install_mcp(&scope, &InstallOpts::default())
-            .unwrap();
-        let contents =
-            std::fs::read_to_string(dir.path().join(".codex/config.toml")).unwrap();
+        Codex.install_mcp(&scope, &InstallOpts::default()).unwrap();
+        let contents = std::fs::read_to_string(dir.path().join(".codex/config.toml")).unwrap();
         assert!(contents.contains("[mcp_servers.ast-bro]"));
         assert!(contents.contains("command = \"ast-bro\""));
         assert!(contents.contains("\"mcp\""));
@@ -183,9 +179,7 @@ mod tests {
         )
         .unwrap();
         let scope = Scope::Local(dir.path().to_path_buf());
-        Codex
-            .install_mcp(&scope, &InstallOpts::default())
-            .unwrap();
+        Codex.install_mcp(&scope, &InstallOpts::default()).unwrap();
         let out = std::fs::read_to_string(&p).unwrap();
         assert!(out.contains("# my codex config"), "comment lost: {}", out);
         assert!(out.contains("model = \"gpt-5\""));
@@ -201,10 +195,8 @@ mod tests {
             .install_skills(&scope, &InstallOpts::default())
             .unwrap();
         assert!(matches!(change, Change::Created(_)));
-        let contents = std::fs::read_to_string(
-            dir.path().join(".agents/skills/ast-bro/SKILL.md"),
-        )
-        .unwrap();
+        let contents =
+            std::fs::read_to_string(dir.path().join(".agents/skills/ast-bro/SKILL.md")).unwrap();
         assert!(contents.starts_with("---\n"));
         assert!(contents.contains("name: ast-bro"));
         assert!(contents.contains("## Use `sb` (the `ast-bro` toolkit) to explore the code"));

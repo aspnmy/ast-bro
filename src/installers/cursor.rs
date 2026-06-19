@@ -137,9 +137,7 @@ mod tests {
     fn install_mcp_writes_cursor_mcp_json() {
         let dir = TempDir::new().unwrap();
         let scope = Scope::Local(dir.path().to_path_buf());
-        let change = Cursor
-            .install_mcp(&scope, &InstallOpts::default())
-            .unwrap();
+        let change = Cursor.install_mcp(&scope, &InstallOpts::default()).unwrap();
         assert!(matches!(change, Change::Created(_)));
         let v: Value = serde_json::from_str(
             &std::fs::read_to_string(dir.path().join(".cursor/mcp.json")).unwrap(),

@@ -65,11 +65,7 @@ fn digest_typo_path_exits_zero_with_note() {
 
 #[test]
 fn implements_typo_path_exits_zero_with_note() {
-    let (ok, stdout, _) = run(&[
-        "implements",
-        "Foo",
-        "/tmp/ast-bro-does-not-exist-xyz",
-    ]);
+    let (ok, stdout, _) = run(&["implements", "Foo", "/tmp/ast-bro-does-not-exist-xyz"]);
     assert!(ok, "must exit 0");
     assert!(
         stdout.contains("# note: path not found:"),
@@ -79,11 +75,7 @@ fn implements_typo_path_exits_zero_with_note() {
 
 #[test]
 fn show_missing_path_exits_zero_with_note() {
-    let (ok, stdout, _) = run(&[
-        "show",
-        "/tmp/ast-bro-does-not-exist-xyz",
-        "Foo",
-    ]);
+    let (ok, stdout, _) = run(&["show", "/tmp/ast-bro-does-not-exist-xyz", "Foo"]);
     assert!(ok, "must exit 0");
     assert!(
         stdout.contains("# note: path not found:"),

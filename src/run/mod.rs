@@ -31,14 +31,10 @@ pub fn detect_lang(path: &Path) -> Option<SupportLang> {
 
 /// Search for pattern matches in source.
 #[allow(dead_code)] // public API; prefer search_with_pattern in loops
-pub fn search(
-    source: &str,
-    lang: SupportLang,
-    pattern: &str,
-) -> Result<Vec<RunMatch>, String> {
+pub fn search(source: &str, lang: SupportLang, pattern: &str) -> Result<Vec<RunMatch>, String> {
     use ast_grep_core::Pattern;
-    let compiled = Pattern::try_new(pattern, lang)
-        .map_err(|e| format!("invalid pattern: {}", e))?;
+    let compiled =
+        Pattern::try_new(pattern, lang).map_err(|e| format!("invalid pattern: {}", e))?;
     search_with_pattern(source, lang, &compiled)
 }
 
@@ -200,8 +196,8 @@ pub fn rewrite(
     replacement: &str,
 ) -> Result<Option<String>, String> {
     use ast_grep_core::Pattern;
-    let compiled = Pattern::try_new(pattern, lang)
-        .map_err(|e| format!("invalid pattern: {}", e))?;
+    let compiled =
+        Pattern::try_new(pattern, lang).map_err(|e| format!("invalid pattern: {}", e))?;
     rewrite_with_pattern(source, lang, &compiled, replacement)
 }
 

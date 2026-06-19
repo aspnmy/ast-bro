@@ -108,9 +108,12 @@ impl Installer for Gemini {
         if let Some(c) = common::uninstall_prompt_in(&self.prompt_path(scope)?, opts)? {
             changes.push(c);
         }
-        if let Some(c) =
-            common::uninstall_json_hook_in(&self.settings_path(scope)?, HOOK_PATH, matches_entry, opts)?
-        {
+        if let Some(c) = common::uninstall_json_hook_in(
+            &self.settings_path(scope)?,
+            HOOK_PATH,
+            matches_entry,
+            opts,
+        )? {
             changes.push(c);
         }
         // Remove current MCP server name

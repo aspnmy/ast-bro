@@ -111,7 +111,12 @@ fn push_target_entry(
                 let sig_tok = sig.as_ref().map(|s| estimate_tokens(s.len())).unwrap_or(0);
                 if sig.is_some() && sig_tok <= budget.saturating_sub(*used) {
                     *used += sig_tok;
-                    entries.push(entry("target (signature only — budget)", None, sig, sig_tok));
+                    entries.push(entry(
+                        "target (signature only — budget)",
+                        None,
+                        sig,
+                        sig_tok,
+                    ));
                 } else {
                     entries.push(entry("target (metadata only — budget)", None, None, 0));
                 }
@@ -142,12 +147,7 @@ fn push_target_entry(
     }
 }
 
-pub fn run_context(
-    target: &str,
-    path: &Path,
-    opts: &ContextOptions,
-    rebuild: bool,
-) -> i32 {
+pub fn run_context(target: &str, path: &Path, opts: &ContextOptions, rebuild: bool) -> i32 {
     let root = match crate::project_root::find_root_for(path) {
         Ok(r) => r,
         Err(e) => {
@@ -316,7 +316,8 @@ fn build_context(
             if !seen_qns.insert(h.edge.source.as_str().to_string()) {
                 continue;
             }
-            let Some(sig) = signature_from_meta(calls, &h.edge.source, root, &mut parse_cache) else {
+            let Some(sig) = signature_from_meta(calls, &h.edge.source, root, &mut parse_cache)
+            else {
                 continue;
             };
             let sig_tok = estimate_tokens(sig.len());
@@ -399,7 +400,8 @@ fn build_context(
             if !seen_qns.insert(h.edge.source.as_str().to_string()) {
                 continue;
             }
-            let Some(sig) = signature_from_meta(calls, &h.edge.source, root, &mut parse_cache) else {
+            let Some(sig) = signature_from_meta(calls, &h.edge.source, root, &mut parse_cache)
+            else {
                 continue;
             };
             let sig_tok = estimate_tokens(sig.len());
@@ -709,7 +711,10 @@ fn signature_from_meta(
             return Some(first_line(&m.source).to_string());
         }
     }
-    matches.into_iter().next().map(|m| first_line(&m.source).to_string())
+    matches
+        .into_iter()
+        .next()
+        .map(|m| first_line(&m.source).to_string())
 }
 
 fn first_line(s: &str) -> &str {
@@ -734,7 +739,8 @@ fn render_text(report: &ContextReport) -> String {
     if report.body_unavailable {
         out.push_str(&format!(
             "{}\n",
-            "# note: target body could not be resolved (parse failure or unsupported language)".dimmed()
+            "# note: target body could not be resolved (parse failure or unsupported language)"
+                .dimmed()
         ));
     }
     if report.truncated {
@@ -785,14 +791,16 @@ pub mod mcp {
             #[serde(default)]
             json: bool,
         }
-        fn default_dot() -> PathBuf { PathBuf::from(".") }
-        fn default_budget() -> usize { 8000 }
+        fn default_dot() -> PathBuf {
+            PathBuf::from(".")
+        }
+        fn default_budget() -> usize {
+            8000
+        }
 
         let a: Args = match serde_json::from_value(args) {
             Ok(v) => v,
-            Err(e) => {
-                return crate::mcp::tools::CallResult::Error(format!("bad args: {e}"))
-            }
+            Err(e) => return crate::mcp::tools::CallResult::Error(format!("bad args: {e}")),
         };
         let root = match crate::project_root::find_root_for(&a.path) {
             Ok(r) => r,
@@ -800,18 +808,12 @@ pub mod mcp {
         };
         let graph = match graph_cache::ensure_with_calls(&root, false) {
             Ok(g) => g,
-            Err(e) => {
-                return crate::mcp::tools::CallResult::Error(format!(
-                    "# error: {}", e
-                ))
-            }
+            Err(e) => return crate::mcp::tools::CallResult::Error(format!("# error: {}", e)),
         };
         let calls = match &graph.calls {
             Some(c) => c,
             None => {
-                return crate::mcp::tools::CallResult::Error(
-                    "# error: call graph is empty".into(),
-                )
+                return crate::mcp::tools::CallResult::Error("# error: call graph is empty".into())
             }
         };
         let candidates = resolve_target_full(calls, &a.target);

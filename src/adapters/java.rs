@@ -614,10 +614,7 @@ fn _call_site_from_method_invocation<'a, D: Doc>(
     })
 }
 
-fn _call_site_from_object_creation<'a, D: Doc>(
-    node: &Node<'a, D>,
-    src: &[u8],
-) -> Option<CallSite> {
+fn _call_site_from_object_creation<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Option<CallSite> {
     let type_node = node.field("type")?;
     let raw = String::from_utf8_lossy(&src[type_node.range()]).to_string();
     let name = _last_type_segment(&raw);

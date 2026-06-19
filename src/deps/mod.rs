@@ -39,12 +39,10 @@ use crate::deps::resolver::{build_suffix_index, resolve, ResolveCtx};
 /// runs in parallel.
 pub fn build_graph(root: &Path) -> Result<DepGraph, DepError> {
     let start = Instant::now();
-    let root_canon = root
-        .canonicalize()
-        .map_err(|e| DepError::Io {
-            path: root.to_path_buf(),
-            source: e,
-        })?;
+    let root_canon = root.canonicalize().map_err(|e| DepError::Io {
+        path: root.to_path_buf(),
+        source: e,
+    })?;
 
     let aliases = detect_aliases(&root_canon);
     let idx = build_suffix_index(&root_canon);

@@ -276,6 +276,4 @@ impl CallGraph {
         }
         self.reverse = rev;
     }
-
-
 }

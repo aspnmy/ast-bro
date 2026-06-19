@@ -102,7 +102,11 @@ mod tests {
     #[test]
     fn round_trip_matches_skill_md() {
         let expected = strip_frontmatter(SKILL_MD);
-        assert_eq!(agent_prompt(), expected, "memoized value must equal fresh strip");
+        assert_eq!(
+            agent_prompt(),
+            expected,
+            "memoized value must equal fresh strip"
+        );
         assert!(
             SKILL_MD.contains(expected),
             "stripped body must appear verbatim inside SKILL.md"

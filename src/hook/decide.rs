@@ -100,10 +100,7 @@ mod tests {
 
     #[test]
     fn pass_through_for_unsupported_extension() {
-        let d = decide(
-            &ev("Read", Some(PathBuf::from("img.png")), false),
-            &opts(),
-        );
+        let d = decide(&ev("Read", Some(PathBuf::from("img.png")), false), &opts());
         assert!(matches!(d, Decision::PassThrough));
     }
 

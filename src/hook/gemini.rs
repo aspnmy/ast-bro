@@ -69,9 +69,6 @@ mod tests {
         let json = r#"{"tool_name":"read_file","tool_input":{"absolute_path":"/x/a.rs"}}"#;
         let e: InputEvent = serde_json::from_str(json).unwrap();
         assert_eq!(e.tool_name, "read_file");
-        assert_eq!(
-            e.tool_input.absolute_path,
-            Some(PathBuf::from("/x/a.rs"))
-        );
+        assert_eq!(e.tool_input.absolute_path, Some(PathBuf::from("/x/a.rs")));
     }
 }

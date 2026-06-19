@@ -16,11 +16,7 @@ use toml_edit::{DocumentMut, Table};
 /// ghost entries from older installs are cleaned up.
 pub const OLD_MCP_SERVER_NAME: &str = "ast-outline";
 
-pub fn install_prompt_in(
-    path: &Path,
-    snippet: &str,
-    opts: &InstallOpts,
-) -> Result<Change, String> {
+pub fn install_prompt_in(path: &Path, snippet: &str, opts: &InstallOpts) -> Result<Change, String> {
     let existing = read_optional(path)?.unwrap_or_default();
 
     let body = snippet.trim_end_matches('\n').to_string() + "\n";
@@ -79,7 +75,11 @@ pub fn install_subagent_in(
     let is_new = on_disk.is_empty();
     // When the file doesn't exist yet, seed `existing` with the frontmatter so
     // marker_block::apply appends the block after it rather than at offset 0.
-    let existing = if is_new { frontmatter.to_string() } else { on_disk.clone() };
+    let existing = if is_new {
+        frontmatter.to_string()
+    } else {
+        on_disk.clone()
+    };
 
     let body = snippet.trim_end_matches('\n').to_string() + "\n";
     let (new_contents, outcome) = marker_block::apply(
@@ -140,8 +140,8 @@ where
     F: Fn(&Value) -> bool,
 {
     let existing = read_optional(path)?.unwrap_or_else(|| "{}".into());
-    let mut root: Value = serde_json::from_str(&existing)
-        .map_err(|e| format!("parse {}: {}", path.display(), e))?;
+    let mut root: Value =
+        serde_json::from_str(&existing).map_err(|e| format!("parse {}: {}", path.display(), e))?;
     let modified = json_hook::upsert(&mut root, hook_path, entry, matches);
     if !modified {
         return Ok(Change::Skipped {
@@ -186,8 +186,8 @@ where
     let Some(existing) = read_optional(path)? else {
         return Ok(None);
     };
-    let mut root: Value = serde_json::from_str(&existing)
-        .map_err(|e| format!("parse {}: {}", path.display(), e))?;
+    let mut root: Value =
+        serde_json::from_str(&existing).map_err(|e| format!("parse {}: {}", path.display(), e))?;
     if !json_hook::remove(&mut root, hook_path, matches) {
         return Ok(None);
     }
@@ -207,8 +207,8 @@ pub fn install_mcp_in(
     opts: &InstallOpts,
 ) -> Result<Change, String> {
     let existing = read_optional(path)?.unwrap_or_else(|| "{}".into());
-    let mut root: Value = serde_json::from_str(&existing)
-        .map_err(|e| format!("parse {}: {}", path.display(), e))?;
+    let mut root: Value =
+        serde_json::from_str(&existing).map_err(|e| format!("parse {}: {}", path.display(), e))?;
 
     let mut modified = false;
     // Remove old name if it exists (migration)
@@ -246,8 +246,8 @@ pub fn uninstall_json_object_in(
     let Some(existing) = read_optional(path)? else {
         return Ok(None);
     };
-    let mut root: Value = serde_json::from_str(&existing)
-        .map_err(|e| format!("parse {}: {}", path.display(), e))?;
+    let mut root: Value =
+        serde_json::from_str(&existing).map_err(|e| format!("parse {}: {}", path.display(), e))?;
     if !json_object::remove(&mut root, key_path, key) {
         return Ok(None);
     }
@@ -363,8 +363,7 @@ pub fn uninstall_plain_file_in(
         return Ok(None);
     }
     if !opts.dry_run {
-        std::fs::remove_file(path)
-            .map_err(|e| format!("remove {}: {}", path.display(), e))?;
+        std::fs::remove_file(path).map_err(|e| format!("remove {}: {}", path.display(), e))?;
         if let Some(parent) = path.parent() {
             let _ = std::fs::remove_dir(parent); // succeeds only if empty
         }
@@ -432,7 +431,10 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("CLAUDE.md");
         std::fs::write(&path, "Use `ast-bro` to explore.\n").unwrap();
-        let opts = InstallOpts { force: true, ..Default::default() };
+        let opts = InstallOpts {
+            force: true,
+            ..Default::default()
+        };
         let change = install_prompt_in(&path, "## Snippet\n", &opts).unwrap();
         assert!(matches!(change, Change::Updated(_)));
         let after = std::fs::read_to_string(&path).unwrap();
