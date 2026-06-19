@@ -8,8 +8,6 @@ use crate::adapters::cpp::CppAdapter;
 use crate::adapters::csharp::CSharpAdapter;
 use crate::adapters::go::GoAdapter;
 use crate::adapters::json::JsonAdapter;
-use crate::adapters::powershell;
-use crate::adapters::toml;
 use crate::adapters::yaml::YamlAdapter;
 use crate::adapters::java::JavaAdapter;
 use crate::adapters::kotlin::KotlinAdapter;
