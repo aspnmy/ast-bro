@@ -56,13 +56,13 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../ast-bro-${{ matrix.target }}.tar.gz ast-bro ast_bro ast-outline sb
+          tar czf ../../../ast-bro-${{ matrix.target }}.tar.gz ast-bro ast-outline sb
 
       - name: Package (windows)
         if: runner.os == 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          7z a -tzip ../../../ast-bro-${{ matrix.target }}.zip ast-bro.exe ast_bro.exe ast-outline.exe sb.exe
+          7z a -tzip ../../../ast-bro-${{ matrix.target }}.zip ast-bro.exe ast-outline.exe sb.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
