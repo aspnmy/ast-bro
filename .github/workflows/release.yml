@@ -40,16 +40,16 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      - name: Install cross (musl / aarch64)
-        if: contains(matrix.target, 'musl') || contains(matrix.target, 'aarch64')
+      - name: Install cross (Linux musl / aarch64 only)
+        if: contains(matrix.target, 'linux') && (contains(matrix.target, 'musl') || contains(matrix.target, 'aarch64'))
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build (native)
-        if: "!contains(matrix.target, 'musl') && !contains(matrix.target, 'aarch64')"
+        if: "!(contains(matrix.target, 'linux') && (contains(matrix.target, 'musl') || contains(matrix.target, 'aarch64')))"
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Build (cross)
-        if: contains(matrix.target, 'musl') || contains(matrix.target, 'aarch64')
+        if: contains(matrix.target, 'linux') && (contains(matrix.target, 'musl') || contains(matrix.target, 'aarch64'))
         run: cross build --release --target ${{ matrix.target }}
 
       - name: Package (unix)
