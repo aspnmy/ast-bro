@@ -78,6 +78,10 @@ For "what does this package actually expose?" — historically the most expensiv
 | Python     | `.py`, `.pyi` |
 | TypeScript | `.ts`, `.tsx` |
 | JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` |
+| JSON       | `.json` |
+| TOML       | `.toml` |
+| YAML       | `.yaml`, `.yml` |
+| PowerShell | `.ps1`, `.psm1`, `.psd1` |
 | Java       | `.java` |
 | Kotlin     | `.kt`, `.kts` |
 | Scala      | `.scala`, `.sc` |
