@@ -9,19 +9,13 @@ pub fn parse_powershell(path: &Path, source: &[u8]) -> ParseResult {
     let mut decls = Vec::new();
 
     // Regex for function/filter/workflow definitions
-    let fn_re = Regex::new(
-        r"(?im)^\s*(function|filter|workflow)\s+(\w[\w-]*)\s*"
-    ).unwrap();
+    let fn_re = Regex::new(r"(?im)^\s*(function|filter|workflow)\s+(\w[\w-]*)\s*").unwrap();
 
     // Regex for class definitions
-    let class_re = Regex::new(
-        r"(?im)^\s*class\s+(\w[\w-]*)\s*"
-    ).unwrap();
+    let class_re = Regex::new(r"(?im)^\s*class\s+(\w[\w-]*)\s*").unwrap();
 
     // Regex for enum definitions
-    let enum_re = Regex::new(
-        r"(?im)^\s*enum\s+(\w[\w-]*)\s*"
-    ).unwrap();
+    let enum_re = Regex::new(r"(?im)^\s*enum\s+(\w[\w-]*)\s*").unwrap();
 
     for caps in fn_re.captures_iter(&text) {
         let kind_str = caps.get(1).unwrap().as_str();

@@ -32,7 +32,7 @@ fn _walk_yaml<'a, D: Doc>(node: &Node<'a, D>, src: &[u8], out: &mut Vec<Declarat
         "block_mapping" | "flow_mapping" | "stream" | "document" => {
             for child in node.children() {
                 let ck = child.kind();
-            let ck: &str = ck.as_ref();
+                let ck: &str = ck.as_ref();
                 if ck == "block_mapping_pair" || ck == "flow_pair" {
                     if let Some(decl) = _pair_to_decl(&child, src) {
                         out.push(decl);
@@ -43,7 +43,7 @@ fn _walk_yaml<'a, D: Doc>(node: &Node<'a, D>, src: &[u8], out: &mut Vec<Declarat
         "block_sequence" | "flow_sequence" => {
             for (i, child) in node.children().enumerate() {
                 let ck = child.kind();
-            let ck: &str = ck.as_ref();
+                let ck: &str = ck.as_ref();
                 if ck == "block_sequence_item" || ck == "flow_node" {
                     let name = format!("[{}]", i);
                     let sig = _node_value_summary(&child, src);
@@ -78,7 +78,9 @@ fn _walk_yaml<'a, D: Doc>(node: &Node<'a, D>, src: &[u8], out: &mut Vec<Declarat
 
 fn _pair_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Option<Declaration> {
     let key = node.field("key")?;
-    let key_name = String::from_utf8_lossy(&src[key.range()]).trim().to_string();
+    let key_name = String::from_utf8_lossy(&src[key.range()])
+        .trim()
+        .to_string();
     let value = node.field("value");
     let sig = value
         .as_ref()
@@ -95,9 +97,15 @@ fn _pair_to_decl<'a, D: Doc>(node: &Node<'a, D>, src: &[u8]) -> Option<Declarati
         docs_inside: false,
         visibility: String::new(),
         start_line: key.start_pos().line() + 1,
-        end_line: value.as_ref().map(|v| v.end_pos().line() + 1).unwrap_or(key.end_pos().line() + 1),
+        end_line: value
+            .as_ref()
+            .map(|v| v.end_pos().line() + 1)
+            .unwrap_or(key.end_pos().line() + 1),
         start_byte: key.range().start,
-        end_byte: value.as_ref().map(|v| v.range().end).unwrap_or(key.range().end),
+        end_byte: value
+            .as_ref()
+            .map(|v| v.range().end)
+            .unwrap_or(key.range().end),
         doc_start_byte: key.range().start,
         native_kind: None,
         modifiers: Vec::new(),
@@ -117,7 +125,8 @@ fn _recurse_yaml<'a, D: Doc>(node: &Node<'a, D>, src: &[u8], out: &mut Vec<Decla
     let kind = node.kind();
     let kind: &str = kind.as_ref();
     match kind {
-        "block_mapping" | "flow_mapping" | "block_sequence" | "flow_sequence" | "stream" | "document" => {
+        "block_mapping" | "flow_mapping" | "block_sequence" | "flow_sequence" | "stream"
+        | "document" => {
             _walk_yaml(node, src, out);
         }
         _ => {}

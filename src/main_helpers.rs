@@ -7,9 +7,8 @@ use crate::adapters::base::LanguageAdapter;
 use crate::adapters::cpp::CppAdapter;
 use crate::adapters::csharp::CSharpAdapter;
 use crate::adapters::go::GoAdapter;
-use crate::adapters::json::JsonAdapter;
-use crate::adapters::yaml::YamlAdapter;
 use crate::adapters::java::JavaAdapter;
+use crate::adapters::json::JsonAdapter;
 use crate::adapters::kotlin::KotlinAdapter;
 use crate::adapters::php::PhpAdapter;
 use crate::adapters::python::PythonAdapter;
@@ -17,6 +16,7 @@ use crate::adapters::ruby::RubyAdapter;
 use crate::adapters::rust::RustAdapter;
 use crate::adapters::scala::ScalaAdapter;
 use crate::adapters::typescript::TypeScriptAdapter;
+use crate::adapters::yaml::YamlAdapter;
 use crate::core::ParseResult;
 
 /// Cheap check: would `parse_file_for_hook` accept this path?
@@ -31,8 +31,20 @@ pub fn can_parse_for_hook(path: &Path) -> bool {
         .to_ascii_lowercase();
     if matches!(
         ext.as_str(),
-        "sql" | "ddl" | "dml" | "md" | "markdown" | "mdx" | "mdown"
-            | "json" | "yaml" | "yml" | "toml" | "ps1" | "psm1" | "psd1"
+        "sql"
+            | "ddl"
+            | "dml"
+            | "md"
+            | "markdown"
+            | "mdx"
+            | "mdown"
+            | "json"
+            | "yaml"
+            | "yml"
+            | "toml"
+            | "ps1"
+            | "psm1"
+            | "psd1"
     ) {
         return true;
     }
