@@ -1,6 +1,11 @@
 use crate::core::{Declaration, DeclarationKind, ParseResult};
 use regex::Regex;
 use std::path::Path;
+use std::sync::OnceLock;
+
+static FN_RE: OnceLock<Regex> = OnceLock::new();
+static CLASS_RE: OnceLock<Regex> = OnceLock::new();
+static ENUM_RE: OnceLock<Regex> = OnceLock::new();
 
 pub fn parse_powershell(path: &Path, source: &[u8]) -> ParseResult {
     let text = String::from_utf8_lossy(source);
@@ -8,20 +13,17 @@ pub fn parse_powershell(path: &Path, source: &[u8]) -> ParseResult {
 
     let mut decls = Vec::new();
 
-    // Regex for function/filter/workflow definitions
-    let fn_re = Regex::new(
-        r"(?im)^\s*(function|filter|workflow)\s+(\w[\w-]*)\s*"
-    ).unwrap();
+    let fn_re = FN_RE.get_or_init(|| {
+        Regex::new(r"(?im)^\s*(function|filter|workflow)\s+(\w[\w-]*)\s*").unwrap()
+    });
 
-    // Regex for class definitions
-    let class_re = Regex::new(
-        r"(?im)^\s*class\s+(\w[\w-]*)\s*"
-    ).unwrap();
+    let class_re = CLASS_RE.get_or_init(|| {
+        Regex::new(r"(?im)^\s*class\s+(\w[\w-]*)\s*").unwrap()
+    });
 
-    // Regex for enum definitions
-    let enum_re = Regex::new(
-        r"(?im)^\s*enum\s+(\w[\w-]*)\s*"
-    ).unwrap();
+    let enum_re = ENUM_RE.get_or_init(|| {
+        Regex::new(r"(?im)^\s*enum\s+(\w[\w-]*)\s*").unwrap()
+    });
 
     for caps in fn_re.captures_iter(&text) {
         let kind_str = caps.get(1).unwrap().as_str();

@@ -29,7 +29,12 @@ fn _walk_yaml<'a, D: Doc>(node: &Node<'a, D>, src: &[u8], out: &mut Vec<Declarat
     let kind = node.kind();
     let kind: &str = kind.as_ref();
     match kind {
-        "block_mapping" | "flow_mapping" | "stream" | "document" => {
+        "stream" | "document" | "block_node" | "flow_node" => {
+            for child in node.children() {
+                _walk_yaml(&child, src, out);
+            }
+        }
+        "block_mapping" | "flow_mapping" => {
             for child in node.children() {
                 let ck = child.kind();
             let ck: &str = ck.as_ref();
@@ -117,7 +122,7 @@ fn _recurse_yaml<'a, D: Doc>(node: &Node<'a, D>, src: &[u8], out: &mut Vec<Decla
     let kind = node.kind();
     let kind: &str = kind.as_ref();
     match kind {
-        "block_mapping" | "flow_mapping" | "block_sequence" | "flow_sequence" | "stream" | "document" => {
+        "block_mapping" | "flow_mapping" | "block_sequence" | "flow_sequence" | "stream" | "document" | "block_node" | "flow_node" => {
             _walk_yaml(node, src, out);
         }
         _ => {}
